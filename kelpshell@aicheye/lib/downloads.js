@@ -33,9 +33,18 @@
 // finished download, which sets that time, and some keep the modification
 // time the server reported.
 //
-// A picture is shown as itself (lib/picture.js). Any other file shows the
-// thumbnail the file manager has made of it, or else the icon of its type.
-// No thumbnail is made here.
+// A picture is shown as itself (lib/picture.js). Any other file shows its
+// thumbnail from the thumbnail cache the file manager uses, or else the icon
+// of its type. A file that has no thumbnail there gets one made, by the
+// thumbnailer the system has for its type, as the file manager does it
+// (DownloadsCard._thumbnail).
+//
+// Until 2026-11-23 no thumbnail was made here. A PDF then showed the icon of
+// its type from the moment it was downloaded: the file manager makes the
+// thumbnail when it shows the folder, and nothing changes in the downloads
+// folder at that time, so the pile was not drawn again either (the user:
+// "pdf download thumbnails aren't loading even though they show in the
+// downloads folder").
 //
 // History, all of 2026-11-21:
 //
@@ -54,6 +63,7 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import GnomeDesktop from 'gi://GnomeDesktop';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
@@ -162,6 +172,40 @@ function iconOf(item, size, styleClass) {
     if (shown.content)
         framed();
     return new St.Bin({width: px, height: px, child: frame});
+}
+
+/**
+ * Make the thumbnail of a file and write it to the thumbnail cache. True
+ * when it is there. mtime: when the file was modified, in seconds.
+ */
+async function makeThumbnail(factory, uri, type, mtime) {
+    const call = (start, finish) => new Promise((resolve, reject) => {
+        start((_factory, result) => {
+            try {
+                resolve(finish(result));
+            } catch (e) {
+                reject(e);
+            }
+        });
+    });
+    let pixbuf = null;
+    try {
+        pixbuf = await call(
+            done => factory.generate_thumbnail_async(uri, type, null, done),
+            result => factory.generate_thumbnail_finish(result));
+    } catch {
+        // No thumbnail of this file: an encrypted PDF, a broken video.
+    }
+    if (!pixbuf) {
+        await call(
+            done => factory.create_failed_thumbnail_async(uri, mtime, null, done),
+            result => factory.create_failed_thumbnail_finish(result));
+        return false;
+    }
+    await call(
+        done => factory.save_thumbnail_async(pixbuf, uri, mtime, null, done),
+        result => factory.save_thumbnail_finish(result));
+    return true;
 }
 
 function folderIcon(size, styleClass) {
@@ -803,6 +847,8 @@ export class DownloadsCard {
         this._scanId = 0;
         this._dragging = false;
         this._known = null;     // URIs seen by the last scan, null before the first
+        this._tried = new Set();    // "uri mtime" of the files a thumbnail was asked for
+        this._making = Promise.resolve();   // ends when the last of them is made
         this.items = [];        // {file, info, time}, newest first
         this.dir = null;
 
@@ -854,6 +900,7 @@ export class DownloadsCard {
         this._watched = path;
         this.dir = path ? Gio.File.new_for_path(path) : null;
         this._known = null;
+        this._tried.clear();
         this.items = [];
         if (this.dir) {
             try {
@@ -951,6 +998,47 @@ export class DownloadsCard {
         this._show(known ? this.items.filter(item => !known.has(item.file.get_uri())) : []);
         if (this._popup.isOpen)
             this._popup.rebuild();
+        this._thumbnail(this.items);
+    }
+
+    /**
+     * Have a thumbnail made for each of these files that has none, one
+     * after the other, and scan the folder again when one is there: the
+     * scan then finds it as the file's "thumbnail::path".
+     *
+     * The thumbnailer of the file's type runs as its own process, in the
+     * sandbox libgnome-desktop puts it in, and the thumbnail goes to
+     * ~/.cache/thumbnails/large, where the file manager finds it too. A
+     * file is asked for once for each time it was modified. When no
+     * thumbnail can be made of it, that is written to the cache, as the
+     * file manager does, and it is not tried again.
+     */
+    _thumbnail(items) {
+        for (const item of items) {
+            const type = item.info.get_content_type();
+            if (!type || PICTURES.includes(type) ||
+                item.info.get_attribute_byte_string('thumbnail::path'))
+                continue;
+            const uri = item.file.get_uri();
+            const mtime = item.info.get_attribute_uint64('time::modified');
+            const key = `${uri} ${mtime}`;
+            if (this._tried.has(key))
+                continue;
+            this._tried.add(key);
+            this._factory ??= GnomeDesktop.DesktopThumbnailFactory.new(
+                GnomeDesktop.DesktopThumbnailSize.LARGE);
+            const factory = this._factory;
+            if (!factory.can_thumbnail(uri, type, mtime))
+                continue;
+            const dir = this.dir;
+            this._making = this._making
+                .then(() => makeThumbnail(factory, uri, type, mtime))
+                .then(made => {
+                    if (made && this.dir === dir)
+                        this._scanSoon();
+                })
+                .catch(e => console.warn(`kelpshell: downloads: thumbnail: ${e.message}`));
+        }
     }
 
     /** One file of the pile: a button that opens it and can be dragged out. */
