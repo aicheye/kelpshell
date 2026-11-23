@@ -461,6 +461,137 @@ const EaseList = GObject.registerClass({
     }
 });
 
+// The fill behind the active workspace of the minimap, and the one behind
+// the icon of the focused window. Each is one actor that moves to its new
+// place over ROW_MS when the workspace or the focus changes.
+//
+// Until 2026-11-23 the fills were the backgrounds of the row and of the icon
+// themselves. The rows are built again at every change, so the fill was gone
+// from one place and there at another in one frame (the user: "the
+// 'workspace' highlight and window highlight should be animated when they
+// move too").
+//
+// A mark has the place of its target, an actor of the list, which
+// MarkedList reads at every layout. While it moves, its place is between the
+// one it had when the target changed (from) and the one the target has now,
+// by progress. The target is a new actor after every rebuild: key tells
+// whether it stands for the same workspace or window as the one before.
+const Mark = GObject.registerClass({
+    Properties: {
+        'progress': GObject.ParamSpec.double('progress', 'progress', 'progress',
+            GObject.ParamFlags.READWRITE, 0, 1, 1),
+    },
+}, class KelpMark extends St.Widget {
+    _init(styleClass) {
+        super._init({style_class: styleClass, reactive: false, opacity: 0});
+        this.target = null;
+        this.key = null;
+        this.from = null;   // [x, y, width, height] in the list
+        this.box = null;    // where it was put by the last layout
+    }
+
+    get progress() {
+        return this._progress ?? 1;
+    }
+
+    set progress(value) {
+        if (value === this._progress)
+            return;
+        this._progress = value;
+        this.notify('progress');
+        this.get_parent()?.queue_relayout();
+    }
+
+    /** actor: the new target, or null for none. animate: false puts it there at once. */
+    moveTo(actor, key, animate) {
+        const before = this.key;
+        this.target = actor;
+        this.key = actor ? key : null;
+        actor?.connect('destroy', () => {
+            if (this.target === actor)
+                this.target = null;
+        });
+        this.get_parent()?.queue_relayout();
+        const fade = opacity => {
+            if (!animate) {
+                this.remove_transition('opacity');
+                this.opacity = opacity;
+            } else if (this.opacity !== opacity) {
+                this.ease({opacity, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            }
+        };
+        if (!actor) {
+            fade(0);
+            return;
+        }
+        if (!animate) {
+            this.remove_transition('progress');
+            this.progress = 1;
+        } else if (this.key !== before) {
+            this.remove_transition('progress');
+            // From where it is. With no place before, or one that has
+            // faded out, it is at its target at once and fades in.
+            const slides = before !== null && this.box && this.opacity > 0;
+            this.from = slides ? this.box : null;
+            this.progress = slides ? 0 : 1;
+            if (slides) {
+                this.ease_property('progress', 1, {
+                    duration: ROW_MS,
+                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                });
+                // The rows have just been built, as in EaseRow.growFrom().
+                holdTransitions(this, ['progress']);
+            }
+        }
+        fade(255);
+    }
+});
+
+// The list of the minimap with its two marks under it.
+const MarkedList = GObject.registerClass(
+class KelpMarkedList extends St.Viewport {
+    _init(list) {
+        super._init({layout_manager: new Clutter.BinLayout(), x_expand: true});
+        this.rowMark = new Mark('kelp-ws-mark');
+        this.cellMark = new Mark('kelp-win-mark');
+        this.add_child(this.rowMark);
+        this.add_child(this.cellMark);
+        this.add_child(list);
+    }
+
+    /** [x, y, width, height] of an actor of the list, in this actor. */
+    _place(actor) {
+        const [width, height] = actor.get_allocation_box().get_size();
+        let x = 0;
+        let y = 0;
+        for (let a = actor; a !== this; a = a.get_parent()) {
+            if (!a)
+                return null;
+            const box = a.get_allocation_box();
+            x += box.x1;
+            y += box.y1;
+        }
+        return [x, y, width, height];
+    }
+
+    vfunc_allocate(box) {
+        super.vfunc_allocate(box);
+        for (const mark of [this.rowMark, this.cellMark]) {
+            const to = mark.target ? this._place(mark.target) : null;
+            // With no target it fades out where it is.
+            let at = mark.box ?? [0, 0, 0, 0];
+            if (to) {
+                const t = mark.progress;
+                at = mark.from && t < 1 ? mark.from.map((v, i) => v + (to[i] - v) * t) : to;
+            }
+            mark.box = at;
+            mark.allocate(new Clutter.ActorBox({
+                x1: at[0], y1: at[1], x2: at[0] + at[2], y2: at[1] + at[3],
+            }));
+        }
+    }
+});
+
 const FillBar = GObject.registerClass(
 class KelpFillBar extends St.Widget {
     _init(fillClass, props) {
@@ -829,10 +960,11 @@ class Minimap {
             style_class: 'kelp-ws-list',
             x_expand: true,
         });
+        this._marked = new MarkedList(this._rows);
         this._scroll = new St.ScrollView({
             hscrollbar_policy: St.PolicyType.NEVER,
             vscrollbar_policy: St.PolicyType.EXTERNAL,
-            child: this._rows,
+            child: this._marked,
             x_expand: true,
         });
         const surface = new St.BoxLayout({
@@ -995,6 +1127,14 @@ class Minimap {
             });
             holdTransitions(this._rows, ['tail']);
         }
+        // The two fills move to the active workspace and to the icon of the
+        // focused window.
+        const rows = this._rows.get_children();
+        let focused = null;
+        for (const row of rows)
+            focused ??= row._slots?.find(slot => slot.win === focus)?.cell ?? null;
+        this._marked.rowMark.moveTo(rows[active] ?? null, active, ease);
+        this._marked.cellMark.moveTo(focused, focus?.get_id(), ease);
         // The title line closes when the focus leaves the windows of the
         // active workspace, and opens when it comes back. It starts from the
         // height the line of the same workspace had, with the title that

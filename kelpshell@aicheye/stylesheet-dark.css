@@ -214,6 +214,32 @@
 .kelp-ws:drop {
   background-color: st-transparentize(-st-accent-color, 0.55);
 }
+/* In the list of the workspaces the two fills are actors of their own, which
+   move when the workspace or the focus changes (Mark in lib/sidebar.js). The
+   row and the icon there have no fill of their own. The row of a secondary
+   monitor's card, which has no such actor, keeps the rules above and below. */
+.kelp-ws-mark {
+  border-radius: 9px;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-win-mark {
+  border-radius: 7px;
+  background-color: rgba(255, 255, 255, 0.14);
+}
+.collapsed .kelp-ws-mark {
+  border-radius: 11px;
+}
+.kelp-ws-list .kelp-ws:checked,
+.kelp-ws-list .kelp-ws:checked:hover,
+.kelp-ws-list .kelp-ws:checked:focus,
+.kelp-ws-list .kelp-win:checked,
+.kelp-ws-list .kelp-win:checked:hover,
+.kelp-ws-list .kelp-win:checked:focus {
+  background-color: transparent;
+}
+.kelp-ws-list .kelp-ws:checked:drop {
+  background-color: st-transparentize(-st-accent-color, 0.55);
+}
 .kelp-ws-insert {
   background-color: -st-accent-color;
   border-radius: 1px;
@@ -1215,6 +1241,232 @@
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 16px;
   box-shadow: none;
+}
+
+/* ---------- prompts ---------- */
+
+/* The shell's dialogs: authentication, passwords, audio device, power off,
+   run, permissions. lib/dialogs.js puts the box of each in a wrapper with
+   this class, which draws the material and the shadow of the popups. */
+.kelp-shadow-dialog {
+  border-radius: 20px;
+  background-color: transparent;
+  box-shadow: none;
+  -kelp-shadow-y: 16px;
+  -kelp-shadow-blur: 44px;
+  -kelp-shadow-color: rgba(0, 0, 0, 0.45);
+}
+/* The box, the shell's .modal-dialog. No background: the wrapper draws the
+   material under it. The shell theme gives it 24px of padding, a spacing of
+   18px and a radius of 18px. */
+.kelp-dialog {
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 20px;
+  box-shadow: none;
+  padding: 20px;
+  spacing: 16px;
+  color: #f4f4f6;
+  /* Of a line that has no class of its own, and of the text fields. */
+  font-size: 13.5px;
+}
+/* The shell theme gives these a width in em of its 11pt, 28 and 24: 411px
+   and 352px. In em of the 13.5px above they are that wide with 30 and 26,
+   and the lines break where they did. */
+.kelp-dialog.prompt-dialog {
+  width: 30em;
+}
+.kelp-dialog.end-session-dialog,
+.kelp-dialog.run-dialog {
+  width: 26em;
+}
+.kelp-dialog .modal-dialog-content-box {
+  padding-top: 6px;
+  spacing: 16px;
+}
+.kelp-dialog .message-dialog-content {
+  spacing: 10px;
+}
+/* The shell theme: 1.364em at a weight of 800, which is 20px. */
+.kelp-dialog .message-dialog-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+}
+/* A title that does not fit in one line gets this class from the shell. */
+.kelp-dialog .message-dialog-title.lightweight {
+  font-size: 15px;
+  font-weight: 700;
+}
+.kelp-dialog .message-dialog-description {
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* The buttons. The shell theme's are a fill of 10% white with a radius of
+   12px, and it mixes the accent colour into the fill of a focused one. A
+   declaration here replaces the shell's whatever the selectors, so the fill
+   of every state is given again. The ring around the focused button is the
+   shell theme's. */
+.kelp-dialog .modal-dialog-button-box {
+  padding-top: 4px;
+}
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button {
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #f4f4f6;
+  background-color: rgba(255, 255, 255, 0.08);
+  transition-duration: 120ms;
+}
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button:focus {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.10);
+}
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button:hover,
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button:focus:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.13);
+}
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button:active,
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button:active:hover,
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button:active:focus {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.18);
+}
+.kelp-dialog .modal-dialog-button-box .modal-dialog-button:insensitive {
+  color: rgba(255, 255, 255, 0.35);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* A text field: the one of the launcher. The ring around the focused field
+   is the shell theme's. */
+.kelp-dialog StEntry,
+.kelp-dialog StEntry:hover,
+.kelp-dialog StEntry:focus {
+  color: #ffffff;
+  caret-color: #ffffff;
+  selection-background-color: st-transparentize(-st-accent-color, 0.3);
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.kelp-dialog StEntry:insensitive {
+  color: rgba(255, 255, 255, 0.45);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.kelp-dialog StEntry StLabel.hint-text {
+  margin-left: 0;
+  color: rgba(255, 255, 255, 0.45);
+}
+/* The lines under a password field: an error, what a fingerprint reader
+   says, and an empty one that keeps their place. */
+.kelp-dialog .prompt-dialog-error-label,
+.kelp-dialog .prompt-dialog-info-label,
+.kelp-dialog .prompt-dialog-null-label {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  margin: 2px 0;
+}
+/* As wide as the row of buttons: the 30em of the box. The shell theme
+   has 20em, and centres the field. In the prompt for a disk password the
+   fields are in a grid, which gives them its width. */
+.kelp-dialog .prompt-dialog-password-entry {
+  width: 30em;
+}
+.kelp-dialog .prompt-dialog-password-grid .prompt-dialog-password-entry {
+  width: auto;
+}
+.kelp-dialog .prompt-dialog-info-label {
+  color: rgba(255, 255, 255, 0.78);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.kelp-dialog .caps-lock-warning-label {
+  font-size: 12px;
+}
+.kelp-dialog .check-box StLabel {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* The authentication prompt: the picture and the name of the user. */
+.kelp-dialog .polkit-dialog-user-layout {
+  spacing: 8px;
+  margin-bottom: 2px;
+}
+.kelp-dialog .polkit-dialog-user-layout .polkit-dialog-user-label,
+.kelp-dialog .polkit-dialog-user-layout .polkit-dialog-user-root-label {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+/* The audio device prompt: one button for each kind of device. The shell
+   theme fills them with shades of #36363a, the grey of its own box. */
+.kelp-dialog .audio-selection-box {
+  spacing: 8px;
+}
+.kelp-dialog .audio-selection-box .audio-selection-device {
+  border-radius: 12px;
+  padding: 4px;
+  color: #f4f4f6;
+  background-color: transparent;
+  transition-duration: 120ms;
+}
+.kelp-dialog .audio-selection-box .audio-selection-device:focus {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.kelp-dialog .audio-selection-box .audio-selection-device:hover,
+.kelp-dialog .audio-selection-box .audio-selection-device:focus:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-dialog .audio-selection-box .audio-selection-device:active,
+.kelp-dialog .audio-selection-box .audio-selection-device:active:hover,
+.kelp-dialog .audio-selection-box .audio-selection-device:active:focus {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.14);
+}
+/* The shell makes each button as wide as it is high, so the 64px of the
+   picture and the 12px of padding of the shell theme stay: with less, the
+   button is too narrow for "Headphones". */
+.kelp-dialog .audio-selection-device-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* A list in a prompt: the apps that keep a session from ending, the
+   processes that keep a disk busy. */
+.kelp-dialog .dialog-list {
+  spacing: 12px;
+}
+.kelp-dialog .dialog-list .dialog-list-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.kelp-dialog .dialog-list .dialog-list-box,
+.kelp-dialog .dialog-list .dialog-list-box .dialog-list-item {
+  spacing: 10px;
+}
+.kelp-dialog .dialog-list .dialog-list-box .dialog-list-item .dialog-list-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.kelp-dialog .dialog-list .dialog-list-box .dialog-list-item .dialog-list-item-title-description,
+.kelp-dialog .dialog-list .dialog-list-box .dialog-list-item .dialog-list-item-description {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+}
+.kelp-dialog .end-session-dialog-battery-warning,
+.kelp-dialog.end-session-dialog .dialog-list-title {
+  font-size: 12.5px;
+  border-radius: 10px;
+}
+.kelp-dialog .run-dialog-description {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 /* ---------- lock screen ---------- */

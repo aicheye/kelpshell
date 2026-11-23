@@ -13,6 +13,7 @@ import {Keybindings} from './lib/keybindings.js';
 import {Backdrop} from './lib/backdrop.js';
 import {setServes} from './lib/crop.js';
 import {Decorations} from './lib/decorations.js';
+import {Dialogs} from './lib/dialogs.js';
 import {Tweaks} from './lib/tweaks.js';
 import {Sidebar} from './lib/sidebar.js';
 import {Launcher} from './lib/launcher.js';
@@ -22,6 +23,7 @@ import {Switcher} from './lib/switcher.js';
 import {Cheatsheet} from './lib/cheatsheet.js';
 import {LockPicture, LockScreen, findFingerprintReader} from './lib/lockscreen.js';
 import {Rehearsal} from './lib/warm.js';
+import {Scroll} from './lib/scroll.js';
 import {LockPower} from './lib/lockpower.js';
 import {LockHold} from './lib/lockhold.js';
 import {LidLock} from './lib/lidlock.js';
@@ -160,9 +162,16 @@ export default class Kelpshell extends Extension {
         this.tweaks = new Tweaks(this.config, this.backdrop);
         this.tweaks.enable();
 
+        this.dialogs = new Dialogs(this.backdrop);
+        this.dialogs.enable();
+
         // Before the tiling: it asks which windows have no frame to cut.
         this.decorations = new Decorations(this.config, this.path);
         this.decorations.enable();
+
+        // After the decorations, which load the native modules.
+        this.scroll = new Scroll(this.config);
+        this.scroll.enable();
         setServes(win => this.decorations.serves(win));
 
         this.tiling = new Tiling(this.config, this.animator);
@@ -301,7 +310,9 @@ export default class Kelpshell extends Extension {
         this.launcher.disable();
         this.tiling.disable(lock);
         setServes(null);
+        this.scroll.disable();
         this.decorations.disable();
+        this.dialogs.disable();
         this.tweaks.disable();
         kept?.hold.take(kept.strut);
         this._kept = kept;
@@ -313,6 +324,7 @@ export default class Kelpshell extends Extension {
         this.keys = this.sidebar = this.launcher = this.tiling = this.switcher = null;
         this.cheatsheet = this.decorations = this.clipboard = null;
         this.tweaks = this.backdrop = this.lockPicture = this.animator = this.config = null;
+        this.dialogs = this.scroll = null;
     }
 
     _reportConfigError() {
@@ -325,6 +337,7 @@ export default class Kelpshell extends Extension {
         this.keys.disable();
         this.keys.enable();
         this.tweaks.apply();
+        this.scroll.apply();
         this.backdrop.refresh();
         this.lockPicture.refresh();
         this.tiling.fade.sync();

@@ -72,6 +72,13 @@ export const DEFAULTS = {
         hotCorner: true,      // the pointer pushed into the top left corner opens it
         webSearch: 'https://www.google.com/search?q=%s',  // %s is the query; '' turns it off
     },
+    scroll: {
+        speed: 1,             // touchpad scroll distance, as a factor on what the touchpad reports
+        likeFirefox: true,    // every window scrolls as far, and goes on as long, as Firefox
+        // Windows whose toolkit is not found by itself, by wm_class substring:
+        // {match: 'name', toolkit: 'firefox' | 'gtk4' | 'chromium' | 'none'}.
+        apps: [],
+    },
     clipboard: {
         size: 25,             // entries kept
         paste: true,          // paste the chosen entry into the focused window; false: only copy it

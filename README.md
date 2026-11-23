@@ -24,12 +24,13 @@ into `~/.local/share/gnome-shell/extensions` and creates
 `~/.config/kelpshell/config.jsonc` if it does not exist.
 `./install.sh --uninstall` removes the link.
 
-The script also builds the two native modules (`dev/build-native.sh`) when
+The script also builds the three native modules (`dev/build-native.sh`) when
 `gcc` and the GLib headers are installed (Fedora: `sudo dnf install gcc
 glib2-devel`). One lets Spotify and other apps named in `windows.crop` leave
-out the frame they draw, see Replaced frames. The other lets a file be
-dragged out of the downloads pile and dropped on a window. Everything else
-works without them. They are built for the installed GNOME Shell version and
+out the frame they draw, see Replaced frames. One lets a file be
+dragged out of the downloads pile and dropped on a window. One hands the
+touchpad's scroll events to the extension before a window gets them, see
+Scrolling in apps. Everything else works without them. They are built for the installed GNOME Shell version and
 are not loaded by another one, so run `dev/build-native.sh` again after an
 upgrade of GNOME.
 
@@ -323,9 +324,52 @@ of the focused app.
 
 All follow the touchpad's natural scrolling setting.
 
+**Scrolling in apps.** Two fingers on the touchpad scroll every window the
+same: as far for the same movement, and going on as long after the fingers
+have left, as in Firefox. Left alone, each toolkit has its own numbers. For
+one unit of what the touchpad reports a GTK 4 window moves 2.5 px, Firefox
+4 px, and Chromium, Electron apps and Spotify 12 px, and after a flick they
+went on for 870, 2460 and 2990 px over 2.6, 3.1 and 1.8 s (measured in the
+headless shell on 2026-11-23 with the same events sent to each).
+
+- While the fingers are on the touchpad, the events for a GTK 4 or Chromium
+  window are made larger or smaller so that it moves Firefox's 4 px.
+- When the fingers leave, such a window is not told. The shell sends the
+  events of the movement after them itself, one for each frame, at the
+  speed and with the friction Firefox would use, and tells the window that
+  the scroll has ended once Firefox would have stopped.
+- A Firefox window gets its events as they are. So does a window of
+  another toolkit (Qt, GTK 3, a terminal), and the shell's own lists.
+- The movement stops when the fingers are back on the touchpad, a key or a
+  button is pressed, or the pointer is over another window.
+
+With the same events, GTK 4, Chrome on Wayland, Chrome under Xwayland and
+Spotify then ended within 2% of Firefox (1451 px in Firefox against 1443,
+1436, 1424 and 1462 px after a slow flick; 4881 against 4854, 4881, 4847 and
+4850 px after a faster one), at scale 1 and at scale 2.
+
+Firefox's numbers are its own preferences (`apz.fling_friction`,
+`apz.fling_min_velocity_threshold`, `apz.fling_stopped_threshold`,
+`apz.gtk.pangesture.pixel_delta_mode_multiplier` and the others named in
+`lib/scroll.js`). They are read from the default Firefox profile when the
+shell starts and when the configuration is saved, so a value changed in
+`about:config` changes every window.
+
+`scroll.speed` is a factor on every touchpad scroll, Firefox included: 0.2 is
+a fifth of what the touchpad reports. It does what `scroll-factor` of
+[libinput-config](https://gitlab.com/warningnonpotablewater/libinput-config)
+does. While that library is still loaded with a scroll factor of its own,
+the shell divides that factor out, so the two never add up. GNOME has a
+setting of this kind too (`scroll-speed` in
+`org.gnome.desktop.peripherals.touchpad`), which Mutter 51.1 does not read.
+`scroll.likeFirefox: false` leaves every window to its own toolkit, and
+`scroll.apps` names the toolkit of a window that is not recognized. The mouse
+wheel is not changed. This needs the native module.
+
 **Material.** Cards show the wallpaper, blurred and tinted, at their own
-screen position. The calendar popup, quick settings, notification banners and
-the window switcher get the same material. Cards are slightly translucent:
+screen position. The calendar popup, quick settings, notification banners,
+the window switcher and the shell's prompts (authentication, passwords, audio
+device, power off, permissions) get the same material. Cards are slightly translucent:
 `theme.opacity` is 0.95, and 1 makes them opaque.
 
 The sidebar's cards, the window thumbnail and the downloads grid show the
@@ -705,6 +749,9 @@ on a stylesheet that a config reload loaded.
 | `lib/downloads.js` | The downloads pile and its grid |
 | `lib/dragout.js` | Dragging a file from the shell onto a window |
 | `native/drag.c` | The Wayland side of that drag: the shell as the source of a drop |
+| `lib/scroll.js` | Touchpad scrolling made the same in every window: distance and movement after the fingers, as in Firefox |
+| `native/scroll.c` | Gives the extension each touchpad scroll event before a window gets it |
+| `lib/dialogs.js` | The shell's prompts in the look of the cards |
 | `lib/picture.js` | Small pictures of image files and image data, proportions kept |
 | `lib/cheatsheet.js` | The shortcut sheet |
 | `lib/switcher.js` | The window switcher |
