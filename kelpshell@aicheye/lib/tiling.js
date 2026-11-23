@@ -151,7 +151,7 @@ export function dropSavedLayout() {
         clearClip(actor);
     }
     const live = new Set(global.display.list_all_windows());
-    for (const win of saved.floating) {
+    for (const win of [...saved.floating, ...saved.raised]) {
         if (live.has(win) && win.is_above())
             win.unmake_above();
     }
@@ -3121,6 +3121,7 @@ export class Tiling {
         this.tiles = new Map();
         this.strips = new Map();
         this.floating = new Set();     // floated by hand in this session
+        this.raised = new Set();       // put over the other windows by layout.above
         this.forced = new Set();       // tiled by hand against the automatic rules
         this._born = new Map();        // window -> ms when it was created
         this._unmapped = new WeakSet();   // new windows the shell has not mapped yet
@@ -3284,7 +3285,7 @@ export class Tiling {
                 actor.translation_y = 0;
                 clearClip(actor);
             }
-            for (const win of this.floating) {
+            for (const win of [...this.floating, ...this.raised]) {
                 if (win.is_above())
                     win.unmake_above();
             }
@@ -3317,6 +3318,7 @@ export class Tiling {
         this.tiles.clear();
         this.strips.clear();
         this.floating.clear();
+        this.raised.clear();
         this.forced.clear();
         this._born.clear();
         this._closed = [];
@@ -3369,6 +3371,7 @@ export class Tiling {
             })),
             current: current?.win ?? null,
             floating: [...this.floating],
+            raised: [...this.raised],
             forced: [...this.forced],
             lastWidth: this._lastWidth,
             closed: this._closed,
@@ -3601,6 +3604,7 @@ export class Tiling {
         const area = tile.strip.area;
         this._untrack(win, false, true);
         this._placeFloating(win, area);
+        this._raise(win);
     }
 
     _watch(win) {
@@ -3813,6 +3817,37 @@ export class Tiling {
             tile.applyFrame(true);
             tile.sync();
         }
+        this._raise(win);
+    }
+
+    /**
+     * layout.above: a window of one of these apps that is not on the strip
+     * is set always on top. A tiled window that gets the focus is raised
+     * over every floating one, and a prompt of 1Password (Quick Access, the
+     * request to use an SSH key) was then behind the columns, where nothing
+     * shows that it waits for an answer (the user, 2026-11-23: "1password
+     * can get hidden behind windows, it should be stuck on top").
+     *
+     * A window that is on the strip, or about to be, is left alone: one
+     * that is always on top never tiles.
+     */
+    _raise(win) {
+        if (win.is_above() || this.tiles.has(win) || win.minimized ||
+            win.is_override_redirect() || isHelper(win))
+            return;
+        const type = win.get_window_type();
+        if (type !== Meta.WindowType.NORMAL && type !== Meta.WindowType.DIALOG &&
+            type !== Meta.WindowType.MODAL_DIALOG && type !== Meta.WindowType.UTILITY)
+            return;
+        const cls = (win.get_wm_class() ?? '').toLowerCase();
+        const above = this.config.values.layout.above;
+        if (!cls || !Array.isArray(above) ||
+            !above.some(p => String(p) && cls.includes(String(p).toLowerCase())))
+            return;
+        if (this._shouldTile(win))
+            return;
+        this.raised.add(win);
+        win.make_above();
     }
 
     /**
@@ -4002,6 +4037,7 @@ export class Tiling {
         // being unmanaged is moved, and activating the neighbour runs a layout.
         this._untrack(win, true);
         this.floating.delete(win);
+        this.raised.delete(win);
         this.forced.delete(win);
         this._born.delete(win);
         this._home.delete(win);
@@ -4021,6 +4057,8 @@ export class Tiling {
         if (saved) {
             for (const win of saved.floating.filter(w => live.has(w)))
                 this.floating.add(win);
+            for (const win of (saved.raised ?? []).filter(w => live.has(w)))
+                this.raised.add(win);
             for (const win of saved.forced.filter(w => live.has(w)))
                 this.forced.add(win);
             this._lastWidth = saved.lastWidth;
@@ -4118,6 +4156,9 @@ export class Tiling {
                 this._unmaximize(win);
             strip.addColumn(tile, strip.columns.length, this._rememberedWidth(win));
         }
+        // The windows that are open and not on a strip, see layout.above.
+        for (const win of wins)
+            this._raise(win);
         // The ring is on the window that gets the focus back from the lock
         // screen with no fade, see _onFocus.
         this._resumed = still;
@@ -5480,9 +5521,11 @@ export class Tiling {
         } else {
             // Floated by hand, or left out of the strip by an automatic rule.
             // Only a window floated here was put above the others here.
-            if (this.floating.delete(win) && win.is_above())
-                win.unmake_above();
+            // Before it is lowered: that asks again whether it tiles.
             this.forced.add(win);
+            const lowered = [this.floating.delete(win), this.raised.delete(win)];
+            if (lowered.includes(true) && win.is_above())
+                win.unmake_above();
             this._retile(win);
             this._onFocus();
         }

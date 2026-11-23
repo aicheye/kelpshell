@@ -153,7 +153,9 @@ several windows stacked vertically. Dialogs, fixed-size windows, and windows
 set to always on top float. So do windows whose maximum size is smaller than
 the screen, windows with a popup window role, and a short built-in list of
 popups that give the window manager no hint (1Password Quick Access,
-Picture-in-Picture). A new window that turns out to float after it was given
+Picture-in-Picture). A floating window of an app named in `layout.above`
+(1Password by default) is set always on top, so a tiled window that gets the
+focus does not cover its prompts. A new window that turns out to float after it was given
 a column (a prompt that declares its fixed size late) leaves the strip, and
 the strip goes back to the view and the focus it had. A new window of an app
 on the built-in list (1Password) has its place at once, and the columns
