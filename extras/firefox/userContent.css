@@ -1,0 +1,23 @@
+/* Kelpshell theme for Firefox: the new tab and home pages, in the greys of
+   userChrome.css. */
+
+@-moz-document url("about:newtab"), url("about:home"), url("about:privatebrowsing"), url("about:blank") {
+  :root,
+  body {
+    --newtab-background-color: #ffffff !important;
+    --newtab-background-color-secondary: #ebebed !important;
+    --newtab-text-primary-color: rgba(0, 0, 6, 0.80) !important;
+    --in-content-page-background: #ffffff !important;
+    background-color: #ffffff !important;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root,
+    body {
+      --newtab-background-color: #1d1d20 !important;
+      --newtab-background-color-secondary: #2e2e32 !important;
+      --newtab-text-primary-color: #ffffff !important;
+      --in-content-page-background: #1d1d20 !important;
+      background-color: #1d1d20 !important;
+    }
+  }
+}

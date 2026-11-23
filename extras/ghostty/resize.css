@@ -1,0 +1,26 @@
+/*
+ * Ghostty 1.4 draws the terminal on its own thread. For the first frames
+ * after its window grows it shows the last picture at the old size and
+ * paints nothing beside it, so the window background showed there: a band
+ * in the header bar's grey (#222226 dark, #fafafb light) for two frames
+ * at 144 Hz after cycle-width and maximize-column.
+ *
+ * This gives the terminal's widget the background of the Ghostty themes
+ * "Adwaita" (#ffffff) and "Adwaita Dark" (#1c1c1f), so that room has the
+ * colour the terminal draws there one or two frames later. With another
+ * theme, put its background here.
+ *
+ * The colour is made from libadwaita's view colour, which is #ffffff in
+ * the light style and #1d1d20 in the dark one. The sums leave 255 as it is
+ * and take 1 from 29 and from 32: 29 - (255 - 29) / 226 = 28.
+ *
+ * No `prefers-color-scheme` media query: Ghostty sets the scheme on a
+ * custom stylesheet at startup and when the scheme changes, and not on
+ * one loaded by a config reload. Until 2026-11-23 the dark colour was in
+ * such a query, and after a reload the band was white in the dark style
+ * (the user: "now it's like bright white").
+ */
+.surface {
+  background-color: rgb(from var(--view-bg-color)
+    calc(r - (255 - r) / 226) calc(g - (255 - g) / 226) calc(b - (255 - b) / 223));
+}

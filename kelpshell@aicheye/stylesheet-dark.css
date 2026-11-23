@@ -1,0 +1,1480 @@
+/* Kelpshell
+ *
+ * Text:        #f4f4f6, secondary 62% white, tertiary 40% white
+ * Hairline:    10% white
+ * Hover/press: 8% / 14% white
+ * Radii:       card 16, row 10, cell 9
+ *
+ * A card's background image (the blurred wallpaper) is set inline by
+ * lib/backdrop.js, so no rule here sets a card background.
+ *
+ * A card never carries its own box-shadow. St draws the shadow of a node
+ * that has a background image as a hard-edged block, so each card sits in a
+ * .kelp-shadow wrapper with a flat background, and the wrapper has the shadow.
+ *
+ * This file is the dark style. dev/light-css.py writes stylesheet-light.css
+ * from it, which the shell loads in its place while the light style is on.
+ * Run the script after every change here. A "light:" comment after a
+ * declaration is read by the script.
+ */
+
+/* ---------- cards ---------- */
+
+/* Corner radii. A shape inside another one, near its corner, has the outer
+   radius less the distance between their edges, so the two curves have one
+   centre. A card is 16px with a 1px border, so something behind p px of card
+   padding is 16 - 1 - p, and something inside that again loses its padding
+   too. The collapsed cards have other paddings, and so other radii. */
+
+/* The card is translucent (theme.opacity), so the wrapper under it is close
+   to transparent. St draws a box-shadow at its full strength whatever the
+   opacity of the background, and draws none without a background. */
+.kelp-shadow {
+  border-radius: 16px;
+  background-color: rgba(0, 0, 0, 0.02);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.26);
+}
+/* The cards of the sidebar. Their box draws nothing from 8px past them on
+   (SidebarBox.setEdge in lib/sidebar.js: layout.gap less 2px), so the shadow
+   has to be over by then. A box-shadow is not: St draws one 1.5 times its
+   blur wide, and with the 14px it had here it still had 40% of its opacity
+   at the cut. Over a bright window that runs under the cards that was a
+   strip beside them with a hard edge, 22 of 209 levels darker than the
+   window (measured 2026-11-22; a blur of 6px left 6 levels). The shadow is
+   drawn by lib/backdrop.js from these three values instead, as for the
+   popups: three box blurs 7px wide, close to a Gaussian, which reach 9px
+   and have less than one level left at 8px. A blur of 8px reaches 12px
+   and left 3 levels. */
+.kelp-sidebar .kelp-shadow {
+  box-shadow: none;
+  -kelp-shadow-y: 4px;
+  -kelp-shadow-blur: 7px;
+  -kelp-shadow-color: rgba(0, 0, 0, 0.30);
+}
+.kelp-shadow-float {
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
+}
+.kelp-shadow-launcher {
+  border-radius: 20px;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.48);
+}
+
+.kelp-card {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  padding: 8px;
+  color: #f4f4f6;
+  font-size: 13px;
+}
+/* A card that gets shorter while it is shown or hidden: the padding is on
+   the box in it, and the card cuts that box off at its border. */
+.kelp-card-cut {
+  padding: 0;
+}
+
+.kelp-icon {
+  icon-size: 16px;
+}
+
+/* 9px: in the controls card, behind 6px of padding. */
+.kelp-icon-button {
+  border-radius: 9px;
+  padding: 7px;
+  color: rgba(255, 255, 255, 0.80);
+  transition-duration: 120ms;
+}
+.kelp-icon-button:hover,
+.kelp-icon-button:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+.kelp-icon-button:active {
+  background-color: rgba(255, 255, 255, 0.14);
+}
+.kelp-icon-button:insensitive {
+  color: rgba(255, 255, 255, 0.30);
+}
+
+/* 9px: behind the 6px padding of the notifications and controls cards. */
+.kelp-row-button {
+  border-radius: 9px;
+  padding: 8px 8px;
+  transition-duration: 120ms;
+}
+.kelp-row-button:hover,
+.kelp-row-button:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-row-button:active {
+  background-color: rgba(255, 255, 255, 0.14);
+}
+
+/* ---------- clock ---------- */
+
+.kelp-clock {
+  padding: 14px 10px 10px 10px;
+  transition-duration: 120ms;
+}
+.kelp-clock:hover,
+.kelp-clock:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+/* The time and the date are 14px from the card edge. The week strip is 10px
+   from it, so each of its seven cells is 20px wide and the digits of the
+   first day start under the time. */
+.kelp-clock-row,
+.kelp-clock-date {
+  padding-left: 4px;
+}
+.kelp-clock-time {
+  font-size: 31px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+}
+.kelp-clock-ampm {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.62);
+  padding-left: 5px;
+  padding-bottom: 6px;
+}
+.kelp-clock-date {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.62);
+}
+.kelp-week {
+  margin-top: 12px;
+}
+/* 5px: behind the 10px padding of the clock card. */
+.kelp-week-day {
+  border-radius: 5px;
+  padding: 5px 0 6px 0;
+}
+.kelp-week-letter {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.38);
+}
+.kelp-week-number {
+  font-size: 11px;
+  font-weight: 500;
+  font-feature-settings: "tnum";
+  color: rgba(255, 255, 255, 0.80);
+}
+.kelp-week-day.today {
+  background-color: -st-accent-color;
+}
+.kelp-week-day.today .kelp-week-letter,
+.kelp-week-day.today .kelp-week-number {
+  color: -st-accent-fg-color;
+}
+.collapsed .kelp-clock {
+  padding: 9px 0 10px 0;
+}
+.collapsed .kelp-clock-row {
+  padding-left: 0;
+}
+.collapsed .kelp-clock-time {
+  font-size: 22px;
+  text-align: center;
+}
+.kelp-clock-short {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* ---------- minimap ---------- */
+
+/* Two fills on the card: the active workspace, and on it the focused
+   window. The active workspace also has the larger icons and the title
+   line. */
+.kelp-minimap {
+  padding: 7px 6px;
+}
+.kelp-ws-list {
+  spacing: 4px;
+}
+/* 9px: behind the 6px padding of the card. */
+.kelp-ws {
+  border-radius: 9px;
+  padding: 2px;
+  transition-duration: 120ms;
+}
+.kelp-ws:hover,
+.kelp-ws:focus {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.kelp-ws:checked {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-ws:drop {
+  background-color: st-transparentize(-st-accent-color, 0.55);
+}
+.kelp-ws-insert {
+  background-color: -st-accent-color;
+  border-radius: 1px;
+}
+.kelp-ws-box {
+  spacing: 4px;
+}
+.kelp-ws-cells {
+  spacing: 2px;
+}
+/* 16px wide, in the middle of the first line of icons: 30px in the active
+   workspace, 24px in the others. With the default card width four icons of
+   the active workspace fit a line, and five of any other. */
+.kelp-ws-number {
+  width: 16px;
+  height: 15px;
+  padding-top: 1px;
+  margin-top: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.36);
+}
+.kelp-ws-rest .kelp-ws-number {
+  margin-top: 4px;
+}
+.kelp-ws:checked .kelp-ws-number {
+  color: #ffffff;
+}
+/* The card of a secondary monitor has this mark where a workspace has its
+   number: 16px wide, in the middle of the first line of icons. */
+.kelp-monitor-mark {
+  icon-size: 12px;
+  width: 16px;
+  height: 16px;
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.36);
+}
+.kelp-ws:checked .kelp-monitor-mark {
+  color: #ffffff;
+}
+/* 7px: the row's 9px less its 2px padding. */
+.kelp-win {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  transition-duration: 120ms;
+}
+.kelp-ws-rest .kelp-win {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.kelp-win:hover,
+.kelp-win:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-win:checked {
+  background-color: rgba(255, 255, 255, 0.14);
+}
+.kelp-win.urgent {
+  box-shadow: inset 0 0 0 1px -st-accent-color;
+}
+.kelp-win-add {
+  color: rgba(255, 255, 255, 0.40);
+}
+.kelp-win-add:hover {
+  color: #ffffff;
+}
+/* The left edge of the text is the left edge of the first icon, which is
+   3px inside its cell. */
+.kelp-ws-caption {
+  padding: 3px 4px 4px 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.62);
+  transition-duration: 120ms;
+}
+.kelp-ws-caption:hover {
+  color: #ffffff;
+}
+.collapsed .kelp-minimap {
+  padding: 4px;
+}
+.collapsed .kelp-ws-list {
+  spacing: 6px;
+}
+/* Collapsed, the card padding is 4px: the row is 16 - 1 - 4 = 11px, and
+   the cell behind the row's 4px padding is 7px. The card is 52px wide, so
+   the row is 42px and a 34px cell has 4px on every side. With 3px of
+   padding it had 3px above and below and 4px at the sides. */
+.collapsed .kelp-ws {
+  border-radius: 11px;
+  padding: 4px;
+}
+.collapsed .kelp-win {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+}
+
+/* ---------- title bar of a cropped window ---------- */
+
+/* The apps this bar is drawn for are dark in both styles. */
+/* light: keep begin */
+
+.kelp-titlebar {
+  background-color: #2e2e32;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom-width: 0;
+}
+/* The colours of a libadwaita header bar in the dark style, focused and not.
+   The font of the title and its padding are set in titlebar.js, from the
+   titlebar-font setting and the number of buttons. */
+.kelp-titlebar.backdrop {
+  background-color: #28282c;
+}
+.kelp-titlebar-title {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #ffffff;
+}
+.kelp-titlebar.backdrop .kelp-titlebar-title,
+.kelp-titlebar.backdrop .kelp-titlebar-button {
+  color: rgba(255, 255, 255, 0.50);
+}
+/* Sizes as in a libadwaita header bar: 24px discs with 16px icons, 13px
+   apart. BUTTON, BUTTON_GAP and BUTTON_MARGIN in titlebar.js repeat them. */
+.kelp-titlebar-controls {
+  spacing: 13px;
+  padding: 0 7px;
+}
+.kelp-titlebar-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.10);
+  transition-duration: 120ms;
+}
+.kelp-titlebar-button:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.kelp-titlebar-button:active {
+  background-color: rgba(255, 255, 255, 0.30);
+}
+.kelp-titlebar-button StIcon {
+  icon-size: 16px;
+}
+/* light: keep end */
+
+/* ---------- window preview ---------- */
+
+.kelp-preview {
+  padding: 8px;
+  spacing: 7px;
+  border-radius: 14px;
+}
+.kelp-preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.80);
+  padding: 0 2px 1px 2px;
+}
+
+/* ---------- media ---------- */
+
+/* 7px here and 3px in .kelp-media-jump put the cover 10px from the card edge,
+   with room for the hover fill around it. */
+.kelp-media {
+  padding: 7px;
+  spacing: 4px;
+}
+.kelp-media-head {
+  spacing: 10px;
+}
+/* 8px behind the 7px card padding, and the cover 3px inside that is 5px. */
+.kelp-media-jump {
+  border-radius: 8px;
+  padding: 3px;
+  transition-duration: 120ms;
+}
+.kelp-media-jump:hover,
+.kelp-media-jump:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-media-jump:active {
+  background-color: rgba(255, 255, 255, 0.14);
+}
+.kelp-media-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-media-cover-icon {
+  icon-size: 20px;
+}
+.kelp-media-title {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.kelp-media-artist {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.62);
+}
+/* The bar starts at the left edge of the cover and ends at the right edge
+   of the text: both are 3px inside .kelp-media-jump. */
+.kelp-media-progress {
+  height: 3px;
+  margin: 6px 3px 3px 3px;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.kelp-media-progress-fill {
+  height: 3px;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.80);
+}
+.collapsed .kelp-media-progress {
+  margin: 1px 2px 0 2px;
+}
+.kelp-media-controls {
+  spacing: 2px;
+}
+.kelp-media-button {
+  border-radius: 8px;
+  padding: 8px;
+}
+.collapsed .kelp-media-button {
+  padding: 6px;
+}
+/* Collapsed, the card is 52px wide: 1px border and 6px padding on each side
+   leave 38px, and the 34px cover sits in the middle of that. */
+.collapsed .kelp-media {
+  padding: 6px;
+  spacing: 4px;
+}
+/* Collapsed, behind 6px of card padding: 9px, and the cover 2px inside 7px. */
+.collapsed .kelp-media-jump {
+  border-radius: 9px;
+  padding: 2px;
+}
+.collapsed .kelp-media-cover {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+}
+.collapsed .kelp-media-button {
+  border-radius: 9px;
+}
+.collapsed .kelp-media-controls {
+  spacing: 0;
+}
+
+/* ---------- notifications ---------- */
+
+.kelp-notifications {
+  padding: 6px;
+  spacing: 2px;
+}
+.kelp-notif-head {
+  spacing: 8px;
+}
+.kelp-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.62);
+}
+.kelp-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background-color: -st-accent-color;
+  color: -st-accent-fg-color;
+}
+.kelp-notif-list {
+  spacing: 2px;
+}
+.kelp-notif-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.kelp-notif-body {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.62);
+}
+.collapsed .kelp-notifications {
+  padding: 4px;
+}
+.collapsed .kelp-notif-head {
+  spacing: 5px;
+}
+/* 11px: behind the 4px padding of the collapsed cards. */
+.collapsed .kelp-row-button {
+  border-radius: 11px;
+  padding: 8px 2px;
+}
+
+/* ---------- system meters ---------- */
+
+/* Fill colours are from the GNOME palette: blue 2, purple 2, orange 2,
+ * yellow 3, green 2. */
+/* The padding is on the meters, not on the card: the card gets shorter
+   while it is shown or hidden, and cuts the meters off at its border. */
+.kelp-system {
+  padding: 0;
+  transition-duration: 120ms;
+}
+.kelp-system:hover,
+.kelp-system:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+/* 14px at the sides: the labels start where the text of the clock and of
+   the notifications starts. */
+.kelp-meters {
+  padding: 15px 14px;
+  spacing: 12px;
+}
+.kelp-meter-row {
+  spacing: 8px;
+}
+.kelp-meter-label {
+  width: 30px;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+}
+.kelp-meter {
+  height: 4px;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.10);
+}
+.kelp-meter-fill {
+  height: 4px;
+  border-radius: 2px;
+}
+.kelp-meter-fill.cpu {
+  background-color: #62a0ea; /* light: #3584e4 */
+}
+.kelp-meter-fill.mem {
+  background-color: #c061cb; /* light: #9141ac */
+}
+.kelp-meter-fill.disk {
+  background-color: #ffa348; /* light: #ff7800 */
+}
+.kelp-meter-fill.io {
+  background-color: #f8e45c; /* light: #e5a50a */
+}
+.kelp-meter-fill.net {
+  background-color: #57e389; /* light: #2ec27e */
+}
+.kelp-meter-value {
+  width: 32px;
+  font-size: 11px;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+  text-align: right;
+  color: rgba(255, 255, 255, 0.80);
+}
+.collapsed .kelp-meters {
+  padding: 11px 8px;
+  spacing: 6px;
+}
+
+/* ---------- controls ---------- */
+
+.kelp-controls {
+  padding: 7px 6px;
+  spacing: 4px;
+}
+.kelp-status {
+  padding: 10px 6px;
+}
+.kelp-status .system-status-icon {
+  icon-size: 16px;
+  padding: 0 4px;
+}
+.kelp-status StLabel {
+  font-size: 12px;
+  font-weight: 600;
+}
+.collapsed .kelp-status .system-status-icon {
+  padding: 4px 0;
+}
+.kelp-control-buttons {
+  spacing: 2px;
+}
+.kelp-control-buttons .kelp-icon-button {
+  padding: 9px 7px;
+}
+.kelp-status-box {
+  spacing: 0;
+}
+/* 4px between the battery icon and its time, 8px between any two icons,
+   so the two read as one group. */
+.kelp-battery-time {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0 4px 0 0;
+  color: rgba(255, 255, 255, 0.80);
+}
+/* 3px under the text: the icons above have 4px of padding and 2px of empty
+   glyph box over their ink, the text has 3px under its digits. With no
+   padding here the column was 14px from the top of the button and 11.5px
+   from its bottom. */
+.collapsed .kelp-battery-time {
+  font-size: 10px;
+  padding: 2px 0 3px 0;
+}
+.kelp-volume {
+  spacing: 4px;
+  padding: 0 8px 0 0;
+}
+.kelp-volume-mute {
+  padding: 8px 7px;
+}
+.kelp-volume-slider {
+  color: #ffffff;
+  -barlevel-height: 4px;
+  -barlevel-background-color: rgba(255, 255, 255, 0.14);
+  -barlevel-active-background-color: rgba(255, 255, 255, 0.85);
+  -barlevel-overdrive-color: rgba(255, 255, 255, 0.85);
+  -barlevel-overdrive-separator-width: 0;
+  -slider-handle-radius: 6px;
+}
+.collapsed .kelp-controls {
+  padding: 4px;
+}
+.collapsed .kelp-control-buttons .kelp-icon-button {
+  border-radius: 11px;
+}
+/* Collapsed, the speaker icon is a button like the two under it. */
+.collapsed .kelp-volume {
+  padding: 0;
+}
+.collapsed .kelp-volume-mute {
+  border-radius: 11px;
+  padding: 9px 7px;
+}
+
+/* ---------- output menu ---------- */
+
+.kelp-output-menu {
+  padding: 6px;
+  border-radius: 14px;
+  min-width: 190px;
+  max-width: 340px;
+}
+.kelp-output-list {
+  spacing: 2px;
+}
+.kelp-output-row {
+  border-radius: 9px;
+  padding: 8px 10px;
+  transition-duration: 80ms;
+}
+.kelp-output-row:hover,
+.kelp-output-row:selected {
+  background-color: rgba(255, 255, 255, 0.10);
+}
+.kelp-output-row:active {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+.kelp-output-row-box {
+  spacing: 9px;
+}
+.kelp-output-name {
+  font-size: 13px;
+}
+.kelp-output-origin {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.kelp-output-check {
+  icon-size: 14px;
+  color: rgba(255, 255, 255, 0.80);
+}
+.kelp-output-empty {
+  padding: 8px 10px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* ---------- launcher ---------- */
+
+.kelp-launcher-overlay {
+  background-color: rgba(0, 0, 0, 0.24);
+}
+.kelp-launcher {
+  padding: 10px;
+  border-radius: 20px;
+}
+.kelp-launcher-search-icon {
+  icon-size: 16px;
+  padding-right: 4px;
+  color: rgba(255, 255, 255, 0.55);
+}
+/* A text field like the shell's own: a fill, and the accent ring the shell
+   theme draws around a focused StEntry. */
+.kelp-launcher-entry,
+.kelp-launcher-entry:hover,
+.kelp-launcher-entry:focus {
+  font-size: 15px;
+  color: #ffffff;
+  caret-color: #ffffff;
+  selection-background-color: st-transparentize(-st-accent-color, 0.3);
+  background-color: rgba(255, 255, 255, 0.08);
+  /* 9px: the launcher is 20px, behind 1px of border and 10px of padding. */
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+/* The shell theme moves the hint 8px right of the cursor. */
+.kelp-launcher-entry StLabel.hint-text {
+  margin-left: 0;
+  color: rgba(255, 255, 255, 0.45);
+}
+.kelp-launcher-list {
+  spacing: 2px;
+  padding-top: 6px;
+}
+.kelp-result {
+  border-radius: 9px;
+  padding: 7px 12px 7px 10px;
+  transition-duration: 80ms;
+}
+.kelp-result:selected {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.kelp-result-box {
+  spacing: 12px;
+}
+.kelp-result-icon {
+  icon-size: 32px;
+}
+/* 20px in the 32px place of an app icon. */
+.kelp-result-symbol {
+  icon-size: 20px;
+  padding: 6px;
+  color: rgba(255, 255, 255, 0.80);
+}
+.kelp-result-title {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.kelp-result-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.60);
+}
+.kelp-result-kind {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.40);
+}
+.kelp-launcher-hint {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.40);
+  padding: 8px 12px 2px 12px;
+}
+
+/* ---------- downloads ---------- */
+
+/* The pile has no card. Its files are buttons with nothing drawn but the
+   file. */
+.kelp-pile-file {
+  padding: 0;
+  border-radius: 6px;
+}
+.kelp-pile-icon {
+  icon-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); /* light: 0 1px 3px rgba(0, 0, 0, 0.22) */
+}
+/* A picture of the pile or the grid: a line around it, so that a white page
+   shows on a white window. */
+.kelp-file-thumb {
+  border: 1px solid rgba(0, 0, 0, 0.26);
+}
+/* The name of the file under the pointer. */
+.kelp-tip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 8px;
+  max-width: 320px;
+  color: #f4f4f6;
+  background-color: rgba(22, 24, 29, 0.94); /* light: rgba(241, 242, 244, 0.96) */
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.30);
+}
+.kelp-downloads-popup {
+  padding: 8px;
+  border-radius: 14px;
+}
+/* 9px: the popup is 14px, behind 1px of border and 8px of padding. Rounded
+   up from 5 so that the tile matches the rows of the cards. */
+.kelp-download-tile {
+  border-radius: 9px;
+  padding: 10px 6px 7px 6px;
+  transition-duration: 80ms;
+}
+.kelp-download-tile:hover,
+.kelp-download-tile:selected {
+  background-color: rgba(255, 255, 255, 0.10);
+}
+.kelp-download-tile:active {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+.kelp-download-tile-box {
+  spacing: 7px;
+}
+.kelp-download-name {
+  width: 92px;
+  font-size: 11.5px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.80);
+}
+
+/* ---------- clipboard list ---------- */
+
+.kelp-clipboard-scroll {
+  max-height: 432px;
+  margin-top: 8px;
+}
+.kelp-clipboard-list {
+  spacing: 2px;
+}
+.kelp-clip {
+  padding: 9px 12px;
+}
+.kelp-clip-text {
+  font-size: 13.5px;
+}
+/* Nothing copied yet: a picture and one line in the middle. */
+.kelp-clipboard-empty {
+  padding: 22px 16px 18px 16px;
+  spacing: 8px;
+}
+.kelp-clipboard-empty-icon {
+  icon-size: 28px;
+  color: rgba(255, 255, 255, 0.36);
+}
+.kelp-clipboard-empty-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.80);
+}
+
+/* ---------- picker: the tabs over the clipboard list, and the grids ---------- */
+
+/* One row of equal parts. 9px and 7px: the picker is 20px, behind 1px of
+   border and 10px of padding, and the parts are 2px inside the row. */
+.kelp-picker-tabs {
+  padding: 2px;
+  spacing: 2px;
+  border-radius: 9px;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.kelp-picker-tab {
+  padding: 6px 0;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.50);
+  transition-duration: 80ms;
+}
+.kelp-picker-tab:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+.kelp-picker-tab:checked {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.13);
+}
+.kelp-picker-tab-icon {
+  icon-size: 16px;
+}
+/* As high as the pictures of the other tabs. */
+.kelp-picker-tab-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  height: 16px;
+}
+/* What was typed to search a page: the look of the launcher's field. */
+.kelp-picker-field {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-picker-query {
+  font-size: 13.5px;
+  color: #ffffff;
+}
+.kelp-picker-query:insensitive {
+  color: rgba(255, 255, 255, 0.45);
+}
+/* The text cursor of the field, see CaretBar in lib/caret.js. */
+.kelp-caret {
+  width: 1px;
+  background-color: #ffffff;
+}
+.kelp-glyph-scroll {
+  margin-top: 4px;
+}
+/* The scroll bars of the picker. The one of the shell is 8px wide: its
+   handle has a 3px border that is meant to leave 2px, and St fills the
+   whole 8px (the user, 2026-11-22: "why's the scroll bar so thick"). */
+.kelp-clipboard StScrollBar {
+  min-width: 4px;
+}
+.kelp-clipboard StScrollBar > .vhandle {
+  border: 0 solid transparent;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.24);
+}
+.kelp-clipboard StScrollBar > .vhandle:hover,
+.kelp-clipboard StScrollBar > .vhandle:active {
+  background-color: rgba(255, 255, 255, 0.45);
+}
+/* The sections of the emoji, under the grid. */
+.kelp-picker-sections {
+  margin-top: 6px;
+  spacing: 1px;
+}
+.kelp-picker-section {
+  padding: 5px 0;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.45);
+  transition-duration: 80ms;
+}
+.kelp-picker-section:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background-color: rgba(255, 255, 255, 0.07);
+}
+.kelp-picker-section:checked {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.11);
+}
+.kelp-glyph {
+  border-radius: 8px;
+  transition-duration: 60ms;
+}
+.kelp-glyph:selected {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.kelp-glyph:active {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+/* 26px, and not a size between: Apple Color Emoji has pictures of 20, 26,
+   32, 40, 48, 52, 64 and 96 px and no outlines, and cairo stretches the
+   nearest one to any other size. At 21px the 20 px pictures (the 40 px ones
+   at a display scale of 2) were drawn 5% larger and blurred. 26px is 26 px
+   at a scale of 1 and 52 px at 2, both pictures of the font. */
+.kelp-glyph-emoji {
+  font-size: 26px;
+}
+.kelp-glyph-kaomoji {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.88);
+}
+.kelp-glyph-symbols {
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.88);
+}
+.kelp-glyph-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 7px 0 0 8px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ---------- drop place of a dragged window ---------- */
+
+.kelp-drop-hint {
+  background-color: st-transparentize(-st-accent-color, 0.74);
+  border: 2px solid st-transparentize(-st-accent-color, 0.2);
+  border-radius: 15px;
+}
+.kelp-drop-bar {
+  background-color: -st-accent-color;
+  border: none;
+  border-radius: 3px;
+}
+
+/* ---------- shortcut sheet ---------- */
+
+.kelp-sheet-overlay {
+  background-color: rgba(0, 0, 0, 0.36);
+}
+.kelp-sheet {
+  padding: 26px 30px 28px 30px;
+  border-radius: 20px;
+}
+.kelp-sheet-columns {
+  spacing: 40px;
+}
+.kelp-sheet-column {
+  spacing: 24px;
+}
+.kelp-sheet-group {
+  spacing: 7px;
+  min-width: 300px;
+}
+.kelp-sheet-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: -st-accent-color;
+  padding-bottom: 3px;
+}
+.kelp-sheet-row {
+  spacing: 24px;
+}
+.kelp-sheet-label {
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.78);
+}
+.kelp-sheet-caps {
+  spacing: 4px;
+}
+/* A key cap: lit from above, with a darker lower edge. */
+.kelp-keycap {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.66);
+  min-width: 14px;
+  text-align: center;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background-color: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.34); /* light: 2px solid rgba(0, 0, 0, 0.18) */
+}
+.kelp-keycap-key {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.kelp-keycap-join {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.40);
+}
+
+/* ---------- window switcher ---------- */
+
+.kelp-switcher {
+  padding: 10px;
+  border-radius: 20px;
+  spacing: 2px;
+}
+.kelp-switcher-row {
+  spacing: 4px;
+}
+/* 16px of the bottom padding is the lower half of the app icon. */
+.kelp-switcher-item {
+  border-radius: 14px;
+  padding: 8px 8px 24px 8px;
+}
+/* Border width is RING_WIDTH in lib/switcher.js. */
+.kelp-switcher-ring {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  transition-duration: 80ms;
+}
+.kelp-switcher-item:selected .kelp-switcher-ring {
+  border-color: -st-accent-color;
+}
+/* Shown only on a window that is on another workspace. */
+.kelp-switcher-ws {
+  margin: 5px;
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: rgba(0, 0, 0, 0.60);
+  color: #ffffff; /* light: keep */
+}
+.kelp-switcher-caption {
+  padding: 0 20px 4px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: #ffffff;
+}
+
+/* ---------- stock popups (calendar, quick settings) ---------- */
+
+/* The wrapper has the popup's own corner radius from the shell theme. Its
+   shadow is not a box-shadow: St cuts one off at the blur radius, and at 44px
+   that showed as the straight edges of a second rectangle around the popup.
+   lib/backdrop.js draws the shadow from these three values. */
+.kelp-shadow-datemenu,
+.kelp-shadow-quicksettings {
+  background-color: transparent;
+  box-shadow: none;
+  -kelp-shadow-y: 16px;
+  -kelp-shadow-blur: 44px;
+  -kelp-shadow-color: rgba(0, 0, 0, 0.45);
+}
+.kelp-shadow-datemenu {
+  border-radius: 30px;
+}
+.kelp-shadow-quicksettings {
+  border-radius: 36px;
+}
+/* No background: the wrapper draws the material under the popup. */
+.kelp-menu {
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: none;
+}
+/* The shell's flat buttons are not transparent. Their fill is #36363a, the
+   colour of the shell's own popup, so on that popup they have no visible
+   shape. The card material is darker, and on it each of them showed as a
+   grey disc: every day of the calendar, the weekday letters, the month and
+   its two arrows. Here they are transparent, and a state is a white fill at
+   a low opacity. A declaration in an extension's stylesheet replaces the
+   shell's whatever the selectors, so the fill of every state is given
+   again, today's too. */
+.kelp-menu .calendar-day,
+.kelp-menu .calendar-day-heading,
+.kelp-menu .calendar-month-label,
+.kelp-menu .pager-button,
+.kelp-menu .icon-button.flat {
+  background-color: transparent;
+}
+.kelp-menu .calendar-day:hover,
+.kelp-menu .pager-button:hover,
+.kelp-menu .icon-button.flat:hover {
+  background-color: rgba(255, 255, 255, 0.09);
+}
+.kelp-menu .calendar-day:selected,
+.kelp-menu .icon-button.flat:checked {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.kelp-menu .calendar-day:selected:hover,
+.kelp-menu .calendar-day:active,
+.kelp-menu .pager-button:active,
+.kelp-menu .icon-button.flat:active {
+  background-color: rgba(255, 255, 255, 0.17);
+}
+.kelp-menu .calendar-day.calendar-today {
+  background-color: -st-accent-color;
+}
+.kelp-menu .calendar-day.calendar-today:hover {
+  background-color: st-lighten(-st-accent-color, 4%);
+}
+.kelp-menu .calendar-day.calendar-today:active {
+  background-color: st-lighten(-st-accent-color, 9%);
+}
+/* The cards inside the calendar popup: a media player or a notification,
+   today's events, the world clocks, the weather. The shell fills them with
+   #54545a and #47474c, greys made to sit on its own popup, #36363a. On the
+   card material, which is darker, they were the brightest surfaces of the
+   popup. Here they are a white fill at a low opacity, as the fills on the
+   sidebar's cards are. Every state is given again, see above. */
+.kelp-menu .message,
+.kelp-menu .events-button,
+.kelp-menu .world-clocks-button,
+.kelp-menu .weather-button {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-menu .message:hover,
+.kelp-menu .message:focus,
+.kelp-menu .events-button:hover,
+.kelp-menu .events-button:focus,
+.kelp-menu .world-clocks-button:hover,
+.kelp-menu .world-clocks-button:focus,
+.kelp-menu .weather-button:hover,
+.kelp-menu .weather-button:focus {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.kelp-menu .message:active,
+.kelp-menu .events-button:active,
+.kelp-menu .world-clocks-button:active,
+.kelp-menu .weather-button:active {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+/* The notifications behind the first one of a collapsed group. */
+.kelp-menu .message:second-in-stack {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.kelp-menu .message:lower-in-stack {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+.kelp-menu .message-media-control:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+}
+.kelp-menu .message-media-control:active {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+/* ---------- notification banners ---------- */
+
+/* Same radius as .notification-banner in the shell theme. lib/tweaks.js sets
+ * the margin of the banner and of this shadow to the layout gap plus 12px. */
+.kelp-shadow-banner {
+  margin: 4px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.40);
+}
+.kelp-banner {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+/* ---------- lock screen ---------- */
+
+/* The shell's lock screen, with .kelp-lock on it from lib/lockscreen.js. A
+   declaration here replaces the shell's whatever the selectors, so only what
+   differs is given. */
+
+/* The clock and the buttons at the bottom are on the darkened wallpaper in
+   both styles, so their colours are the dark style's in both. */
+/* light: keep begin */
+.kelp-lock .unlock-dialog-clock {
+  spacing: 2px;
+  color: #f4f4f6;
+}
+/* The wallpaper keeps 70% of its brightness (theme.lockTint), so a light
+   part of it comes close to the white of the text: on a pale green the
+   date and the hint could not be read (the user, 2026-11-22). Every text
+   on the wallpaper has a soft dark shadow, and the lesser texts are whiter
+   than they were on the darker picture. */
+.kelp-lock .unlock-dialog-clock .unlock-dialog-clock-time {
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+.kelp-lock .unlock-dialog-clock .unlock-dialog-clock-date,
+.kelp-lock .unlock-dialog-clock .unlock-dialog-clock-hint,
+.kelp-lock .user-widget.vertical .user-widget-label,
+.kelp-lock .login-dialog-message,
+.kelp-lock .caps-lock-warning-label {
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.50);
+}
+/* The sidebar's clock: 700, with digits of one width. */
+.kelp-lock .unlock-dialog-clock .unlock-dialog-clock-time {
+  font-size: 104px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+}
+.kelp-lock .unlock-dialog-clock .unlock-dialog-clock-date {
+  font-size: 20px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+}
+.kelp-lock .unlock-dialog-clock .unlock-dialog-clock-hint {
+  margin-top: 34px;
+  padding: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+}
+.kelp-lock .login-dialog-bottom-button-group {
+  padding: 16px;
+  spacing: 6px;
+}
+.kelp-lock .login-dialog-button.switch-user-button,
+.kelp-lock .login-dialog-button.login-dialog-auth-menu-button {
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.80);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-lock .login-dialog-button.switch-user-button:hover,
+.kelp-lock .login-dialog-button.switch-user-button:focus,
+.kelp-lock .login-dialog-button.login-dialog-auth-menu-button:hover,
+.kelp-lock .login-dialog-button.login-dialog-auth-menu-button:focus {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.14);
+}
+/* "Unlock with fingerprint", bottom left. It is not drawn: there it was too
+   far from the entry to be seen, and lib/lockscreen.js shows its icon next
+   to the entry (.kelp-lock-method below). It has the classes of the button
+   above, so the fill of that button is taken off it here too. */
+.kelp-lock .login-dialog-button.login-dialog-auth-menu-button.login-dialog-auth-menu-button-indicator,
+.kelp-lock .login-dialog-button.login-dialog-auth-menu-button.login-dialog-auth-menu-button-indicator:hover,
+.kelp-lock .login-dialog-button.login-dialog-auth-menu-button.login-dialog-auth-menu-button-indicator:focus {
+  margin: 16px;
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: transparent;
+}
+.kelp-lock .login-dialog-auth-menu-button-indicator .login-dialog-auth-menu-button-indicator-icons .login-dialog-auth-menu-button-indicator-icon {
+  icon-size: 16px;
+}
+.kelp-lock .login-dialog-auth-menu-button-indicator .login-dialog-auth-menu-button-indicator-description {
+  font-size: 12.5px;
+  font-weight: 500;
+  margin-left: 8px;
+}
+/* light: keep end */
+
+/* The prompt: the picture, the name, the entry and the messages, all on the
+   wallpaper, as the clock is.
+
+   The shell puts the middle of the prompt 50px under the middle of the
+   monitor, where the clock was not: 100px of margin under the prompt make
+   the two middles one.
+
+   The shell gives the prompt a height of 550px so that nothing moves when
+   the entry appears. A height in a stylesheet is the height: the box does
+   not grow past it, and no later rule can take it away again. So
+   lib/lockscreen.js takes the shell's class off the prompt and gives it
+   .kelp-lock-prompt, which has no height. Nothing moves there either: the
+   row of the entry has its height before the entry is shown, and the
+   message has its line whether it has text or not. */
+/* light: keep begin */
+.kelp-lock .login-dialog-prompt-layout {
+  /* Only a prompt the class was not taken off: the height of the picture,
+     the name, the entry and the message. */
+  height: 218px;
+}
+.kelp-lock .login-dialog-prompt-layout,
+.kelp-lock .kelp-lock-prompt {
+  width: 340px;
+  margin-bottom: 100px;
+  color: #f4f4f6;
+  font-size: 13px;
+}
+/* The picture and the name carry the page, as the digits carry the clock
+   page: 136px and 26px over a 40px entry. At 96px and 18px they were small
+   beside the entry (the user, 2026-11-22). */
+.kelp-lock .user-widget.vertical {
+  spacing: 18px;
+}
+.kelp-lock .user-widget.vertical .user-icon {
+  icon-size: 136px;
+  background-color: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.80);
+}
+.kelp-lock .user-widget.vertical .user-icon StIcon {
+  padding: 30px;
+}
+.kelp-lock .user-widget.vertical .user-widget-label {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 0;
+  color: #f4f4f6;
+}
+.kelp-lock .login-dialog-input-well {
+  margin: 24px 0 0 0;
+}
+.kelp-lock .login-dialog-button-box {
+  height: 40px;
+}
+/* The back button, and the room of its width the shell leaves on the other
+   side of the entry: 38px each, so the entry is 264px of the 340px. It is
+   shown from the second step of a login on. */
+.kelp-lock .login-dialog-button.cancel-button {
+  padding: 8px;
+  margin: 0 4px;
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.80);
+  background-color: transparent;
+}
+.kelp-lock .login-dialog-button.cancel-button:hover,
+.kelp-lock .login-dialog-button.cancel-button:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.kelp-lock .login-dialog-prompt-entry-area {
+  margin: 0;
+}
+/* A fingerprint, when the reader waits for one: to the right of the entry,
+   in the 38px the shell leaves there. */
+.kelp-lock-method {
+  icon-size: 22px;
+  color: rgba(255, 255, 255, 0.92);
+  icon-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+/* The shell keeps 2.75em for the message. One line here. */
+.kelp-lock .login-dialog-message,
+.kelp-lock .login-dialog-message-hint {
+  margin-top: 10px;
+  min-height: 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+}
+/* "(or place finger on reader)" is the one hint the lock screen gets. It is
+   not drawn: "Unlock with fingerprint" in the bottom left says the same.
+   The line stays, for the messages that are not hints. */
+.kelp-lock .login-dialog-message.login-dialog-message-hint {
+  color: transparent;
+}
+/* Its room over the text is padding: the shell gives the label a height of
+   0 while it is not shown, and a margin would stay. */
+.kelp-lock .caps-lock-warning-label {
+  padding: 10px 0 0 0;
+  font-size: 12.5px;
+}
+/* The entry: a quarter black on the wallpaper, a light hairline, and the
+   shell's ring while it has the focus. Not the card material: a dark box
+   under the picture and the name was turned down (2026-11-22), and so was
+   the material on the entry alone. A light fill, like the circle behind
+   the picture, was here while the wallpaper was darker. */
+.kelp-lock .login-dialog-prompt-entry,
+.kelp-lock .login-dialog-prompt-entry:hover,
+.kelp-lock .login-dialog-prompt-entry:focus,
+.kelp-lock .login-dialog-prompt-entry:insensitive {
+  font-size: 14px;
+  color: #ffffff;
+  caret-color: #ffffff;
+  selection-background-color: st-transparentize(-st-accent-color, 0.3);
+  /* A quarter black with a light hairline. A light fill (white at 0.14)
+     over a light part of the wallpaper left white text at a contrast of 2
+     to 1; this gives 4 to 1 there. */
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  padding: 10px 13px;
+}
+.kelp-lock .login-dialog-prompt-entry:focus {
+  box-shadow: inset 0 0 0 2px st-transparentize(st-mix(-st-accent-color, #ffffff, 60%), 0.2) !important;
+}
+.kelp-lock .login-dialog-prompt-entry:insensitive {
+  color: rgba(255, 255, 255, 0.55);
+}
+/* 3px right of the cursor, which is at the start of the text: at the same
+   place the cursor was on the stem of the P of "Password". */
+.kelp-lock .login-dialog-prompt-entry StLabel.hint-text {
+  margin-left: 3px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.kelp-lock .login-dialog-button.next-button {
+  color: rgba(255, 255, 255, 0.85);
+}
+/* light: keep end */
+
+/* One card per app with notifications, and one per media player. */
+.kelp-lock .unlock-dialog-notifications-container {
+  width: 340px;
+  spacing: 8px;
+  margin: 12px;
+}
+.kelp-lock .unlock-dialog-notifications-container .message,
+.kelp-lock .unlock-dialog-notifications-container .unlock-dialog-notification-source {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  color: #f4f4f6;
+  font-size: 13px;
+}
+/* The material is an inline style, so the shell's lighter fill of an urgent
+   one does not show. The line around it does. */
+.kelp-lock .unlock-dialog-notifications-container .message.critical,
+.kelp-lock .unlock-dialog-notifications-container .unlock-dialog-notification-source.critical {
+  border-color: rgba(255, 255, 255, 0.30);
+}
+.kelp-lock .unlock-dialog-notifications-container .message .message-header {
+  color: #f4f4f6;
+}
+.kelp-lock .unlock-dialog-notification-icon {
+  icon-size: 28px;
+}
+.kelp-lock .unlock-dialog-notification-label {
+  font-weight: 600;
+}
+.kelp-lock .unlock-dialog-notification-count-text {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 8px;
+  color: rgba(255, 255, 255, 0.62);
+  background-color: rgba(255, 255, 255, 0.08);
+}

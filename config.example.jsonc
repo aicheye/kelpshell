@@ -1,0 +1,190 @@
+// Kelpshell configuration.
+//
+// Copy to ~/.config/kelpshell/config.jsonc and edit. The file is watched, so
+// saving it applies the change. Every key is optional: anything left out keeps
+// the default shown here. Comments and trailing commas are allowed.
+{
+  "sidebar": {
+    "width": 164,            // px, card width when expanded
+    "collapsedWidth": 52,    // px, card width when collapsed
+    "margin": 10,            // px between the screen edge and the cards
+    "gap": 8,                // px between cards
+    "collapsed": false,      // start collapsed
+    "previewDelay": 350,     // ms of hover before a window thumbnail shows
+    "notifications": 3,      // rows shown in the notification card
+    "system": true,          // processor, memory, disk and network meters
+    "downloads": true,       // the pile of the newest files in the downloads folder
+    "downloadsDir": "",      // the folder it shows. Empty: XDG_DOWNLOAD_DIR
+    "statusFill": ["powerMode", "bluetooth"]  // icons that fill the status row up to four
+                             // places, in this order. Also: "nightLight"
+  },
+
+  "layout": {
+    "gap": 10,                               // px between windows and around the strip
+    "presetWidths": [0.33333, 0.5, 0.66667], // cycle-width steps, as a share of the view
+    "defaultWidth": 0.5,                     // width of a new column
+    "rememberWidths": true,                  // a new window opens at the width last set for
+                                             // its app. Kept in ~/.local/state/kelpshell/widths.json
+    "centerSingleColumn": true,              // a lone column sits in the middle
+    "centerColumns": true,                   // so do several, while they are narrower than the screen together
+    "centerFocusedColumn": "never",          // "never" or "always"
+    "verticalWorkspaces": true,              // workspaces slide up and down
+    "scrollSecondary": false,                // false: on a secondary monitor the columns share
+                                             // the width and nothing scrolls. A width set with
+                                             // cycle-width is a share of the monitor there.
+                                             // true: it scrolls like the primary
+    "float": []                              // wm_class or title substrings that never tile,
+                                             // for example ["pavucontrol", "Picture-in-Picture"]
+  },
+
+  "focusRing": {
+    "enabled": true,
+    "width": 2,
+    "radius": 15,            // corner radius of the windows it surrounds
+    "color": "rgba(255,255,255,0.55)"
+  },
+
+  "windows": {
+    "clipCorners": true,     // cut every window's corners to focusRing.radius, so the ring
+                             // fits all of them. This also removes the shadow a window
+                             // draws around itself
+    "outline": true,         // a one pixel light outline on every window, so a window
+                             // with dark content has an edge on a dark wallpaper
+    "unfocusedScale": 0.98,  // a tiled window without focus is drawn this much smaller, in
+                             // place. 1 turns it off
+    // A Chromium app on Wayland draws its own blue title bar and border,
+    // because GNOME gives it none. Each rule names the windows whose
+    // wm_class contains "match". With the native module (dev/build-native.sh)
+    // the app is told to leave that frame out. Without it the frame is cut
+    // off, and the numbers are its thickness in px.
+    // "titlebar": true draws a title bar with the system's buttons above
+    // the content. false leaves the window without one.
+    "crop": [{"match": "spotify", "top": 26, "right": 5, "bottom": 5, "left": 5, "titlebar": true}]
+  },
+
+  "animation": {
+    "stiffness": 800,        // higher is faster. 800 settles in about 0.25 s
+    "damping": 1.0           // 1 = no overshoot, below 1 bounces
+  },
+
+  "theme": {
+    "tint": "#16181d",       // colour the blurred wallpaper is mixed toward, dark style
+    "tintLight": "#f1f2f4",  // the same in the light style
+    "opacity": 0.95,         // of the cards: 1 = opaque
+    "tintStrength": 0.72,    // 0 = raw blurred wallpaper, 1 = flat tint
+    "saturation": 1.6,       // wallpaper colour boost before tinting
+    "blur": 6,               // blur passes, 0 to 6
+    "liveBlur": true,        // windows are blurred under the sidebar and under its cards. false: windows fade out under the sidebar
+    "liveBlurTint": 0.7,     // how far the blurred windows are mixed toward the tint. 1 = no blur to see
+    "shade": 0.5,            // with liveBlur: how far windows are darkened towards black at the edge of the monitor. 0 = off, 1 = black
+    "shadeRamp": 0.25,       // where the blur starts to lessen, as a share of the width under the sidebar. 0 = from the edge of the monitor on, 0.999 = a hard edge
+    "lockTint": 0.3          // how far the lock screen's wallpaper is mixed toward the tint. 0 = the blurred wallpaper as it is, 0.58 = as dark as stock GNOME with the first version's scrim
+  },
+
+  "clipboard": {
+    "size": 25,              // entries the Super+V list keeps
+    "paste": true            // paste the chosen entry into the focused window. false: only copy it
+  },
+
+  "launcher": {
+    "width": 640,
+    "maxResults": 8,            // apps, windows and actions; other rows come after these
+    "searchProviders": true,    // files, settings and the rest of Settings > Search
+    "hotCorner": true,          // the pointer pushed into the top left corner opens the launcher
+    "webSearch": "https://www.google.com/search?q=%s"   // %s is the query; "" turns it off
+  },
+
+  "notifications": {
+    "bannerPosition": "right"   // "left", "center" or "right"
+  },
+
+  "lock": {
+    "onLidClose": true    // closing the lid locks at once when the laptop's panel is the
+                          // only display, also when no suspend follows (see README)
+  },
+
+  "sound": {
+    "pauseOnOutputChange": true,  // another output device pauses the media players
+    "presetPerOutput": true       // and loads the EasyEffects output preset that was
+                                  // loaded when that device was last the output
+  },
+
+  "commands": {
+    "terminal": "",             // empty: the first installed of ptyxis, kgx, gnome-terminal, ...
+    "files": "nautilus --new-window"
+  },
+
+  "gestures": {
+    "swipeScroll": true,        // three-finger horizontal swipe scrolls the strip
+    "sensitivity": 1            // 1: a swipe of 1200 touchpad units scrolls one view width.
+                                // 2 scrolls twice as far for the same swipe
+  },
+
+  // Each action takes a list of accelerators in GTK syntax. Use [] to unbind.
+  // A combo that a GNOME setting already uses is removed from that setting
+  // while Kelpshell is enabled and restored when it is disabled.
+  "keybindings": {
+    "focus-left": ["<Super>a", "<Super>Left"],
+    "focus-right": ["<Super>d", "<Super>Right"],
+    "focus-up": ["<Super>w", "<Super>Up"],            // window above, then the workspace above
+    "focus-down": ["<Super>s", "<Super>Down"],
+    "focus-first": ["<Super>Home"],
+    "focus-last": ["<Super>End"],
+
+    "move-left": ["<Super><Control>a", "<Super><Control>Left"],     // move the column
+    "move-right": ["<Super><Control>d", "<Super><Control>Right"],
+    "move-up": ["<Super><Control>w", "<Super><Control>Up"],         // move the window in its column, then to the workspace above
+    "move-down": ["<Super><Control>s", "<Super><Control>Down"],
+    "move-first": ["<Super><Control>Home"],
+    "move-last": ["<Super><Control>End"],
+    "consume-or-expel-left": ["<Super>bracketleft"],   // stack into the left column, or leave a stack
+    "consume-or-expel-right": ["<Super>bracketright"],
+
+    "cycle-width": ["<Super>r"],
+    "width-decrease": ["<Super>minus"],
+    "width-increase": ["<Super>equal"],
+    "height-decrease": ["<Super><Shift>minus"],
+    "height-increase": ["<Super><Shift>equal"],
+    "maximize-column": ["<Super>f"],
+    "fullscreen": ["<Super><Shift>f"],
+    "center-column": ["<Super>c"],
+    "align-left": ["<Super><Shift>a"],      // the window to the left side of the screen: the view scrolls
+    "align-right": ["<Super><Shift>d"],
+    "align-center": ["<Super><Shift>w"],    // to the middle, as center-column
+    "minimize-window": ["<Super><Shift>s"],
+    "toggle-float": ["<Super>t"],
+    "close-window": ["<Super>q"],
+    "reopen-closed": ["<Super><Shift>t"],   // a new window of the app closed last
+
+    "workspace-up": ["<Super>Page_Up"],
+    "workspace-down": ["<Super>Page_Down"],
+    "move-to-workspace-up": ["<Super><Control>Page_Up"],
+    "move-to-workspace-down": ["<Super><Control>Page_Down"],
+    "workspace-1": ["<Super>1"],
+    "workspace-2": ["<Super>2"],
+    "workspace-3": ["<Super>3"],
+    "workspace-4": ["<Super>4"],
+    "workspace-5": ["<Super>5"],
+    "workspace-6": ["<Super>6"],
+    "workspace-7": ["<Super>7"],
+    "workspace-8": ["<Super>8"],
+    "workspace-9": ["<Super>9"],
+    "move-to-workspace-1": ["<Super><Control>1"],
+    "move-to-workspace-2": ["<Super><Control>2"],
+    "move-to-workspace-3": ["<Super><Control>3"],
+    "move-to-workspace-4": ["<Super><Control>4"],
+    "move-to-workspace-5": ["<Super><Control>5"],
+    "move-to-workspace-6": ["<Super><Control>6"],
+    "move-to-workspace-7": ["<Super><Control>7"],
+    "move-to-workspace-8": ["<Super><Control>8"],
+    "move-to-workspace-9": ["<Super><Control>9"],
+
+    "launcher": ["<Super>space"],             // tapping Super alone also opens it
+    "clipboard": ["<Super>v"],                // the list of what was copied lately
+    "emoji": ["<Super>period"],               // emoji, emoticons and symbols, in the same picker
+    "terminal": ["<Super>Return"],
+    "files": ["<Super>e"],
+    "toggle-sidebar": ["<Super>b"],
+    "shortcuts": ["<Super>slash"]             // a sheet of all these keys
+  }
+}

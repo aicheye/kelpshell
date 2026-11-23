@@ -1,0 +1,107 @@
+/* Kelpshell theme for Firefox.
+ *
+ * The greys are libadwaita's, so Firefox has the same ones as the GTK apps
+ * and the terminal next to it, in the dark and in the light style:
+ *
+ *                 dark      light
+ *   surface       #1d1d20   #ffffff   view background, a terminal's background
+ *   raised        #2e2e32   #ebebed   header bar (dark), sidebar (light)
+ *   panel         #36363a   #ffffff   popover, also the shell's own popups
+ *
+ * Until 2026-11-21 the surface was #16181d, the tint of the shell's cards,
+ * which is bluer than those greys: a Firefox window next to a terminal
+ * showed two different darks.
+ *
+ * It sets Firefox's own theme variables and adds no layout rules, so a
+ * variable that a later Firefox renames stops applying and nothing breaks.
+ * Variable names are those of Firefox 160.
+ *
+ * Install: see README.md, section "Firefox theme".
+ */
+
+:root {
+  --kelp-surface: #ffffff;
+  --kelp-raised: #ebebed;
+  --kelp-panel: #ffffff;
+  --kelp-text: rgba(0, 0, 6, 0.80);
+  --kelp-text-secondary: rgba(0, 0, 6, 0.55);
+  --kelp-icon: rgba(0, 0, 6, 0.70);
+  --kelp-hairline: rgba(0, 0, 6, 0.15);
+  --kelp-field: rgba(0, 0, 6, 0.06);
+  --kelp-hover: rgba(0, 0, 6, 0.07);
+  --kelp-active: rgba(0, 0, 6, 0.13);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --kelp-surface: #1d1d20;
+    --kelp-raised: #2e2e32;
+    --kelp-panel: #36363a;
+    --kelp-text: #ffffff;
+    --kelp-text-secondary: rgba(255, 255, 255, 0.62);
+    --kelp-icon: rgba(255, 255, 255, 0.80);
+    --kelp-hairline: rgba(255, 255, 255, 0.10);
+    --kelp-field: rgba(255, 255, 255, 0.06);
+    --kelp-hover: rgba(255, 255, 255, 0.08);
+    --kelp-active: rgba(255, 255, 255, 0.14);
+  }
+}
+
+:root {
+  /* Window frame: the title bar, and the tab strip or vertical tabs. */
+  --toolbox-background-color: var(--kelp-surface) !important;
+  --toolbox-background-color-inactive: var(--kelp-surface) !important;
+  --toolbox-text-color: var(--kelp-text) !important;
+  --toolbox-text-color-inactive: var(--kelp-text-secondary) !important;
+
+  /* Navigation toolbar and bookmarks toolbar. */
+  --toolbar-background-color: var(--kelp-surface) !important;
+  --toolbar-text-color: var(--kelp-text) !important;
+  --toolbarbutton-icon-fill: var(--kelp-icon) !important;
+  --toolbarbutton-background-color-hover: var(--kelp-hover) !important;
+  --toolbarbutton-background-color-active: var(--kelp-active) !important;
+  --toolbarbutton-border-radius: 9px !important;
+  --chrome-content-separator-color: var(--kelp-hairline) !important;
+  --tabs-navbar-separator-color: transparent !important;
+
+  /* Tabs. */
+  --tab-background-color-selected: var(--kelp-active) !important;
+  --tab-background-color-hover: var(--kelp-hover) !important;
+  --tab-text-color-selected: var(--kelp-text) !important;
+  --tab-border-color-selected: transparent !important;
+  --tab-border-radius: 10px !important;
+
+  /* Address bar and its results. */
+  --toolbar-field-background-color: var(--kelp-field) !important;
+  --toolbar-field-background-color-focus: var(--kelp-raised) !important;
+  --toolbar-field-text-color: var(--kelp-text) !important;
+  --toolbar-field-text-color-focus: var(--kelp-text) !important;
+  --toolbar-field-border-color: var(--kelp-hairline) !important;
+  --toolbar-field-border-color-focus: AccentColor !important;
+  --urlbar-border-radius: 10px !important;
+  --urlbar-box-background-color: var(--kelp-hover) !important;
+  --urlbar-box-background-color-hover: var(--kelp-active) !important;
+  --urlbarview-background-color-hover: var(--kelp-hover) !important;
+  --urlbarview-background-color-selected: AccentColor !important;
+  --urlbarview-text-color-selected: AccentColorText !important;
+  --urlbarview-separator-color: var(--kelp-hairline) !important;
+
+  /* Menus and popup panels. */
+  --panel-background-color: var(--kelp-panel) !important;
+  --panel-text-color: var(--kelp-text) !important;
+  --panel-border-color: var(--kelp-hairline) !important;
+  --panel-separator-color: var(--kelp-hairline) !important;
+  --panel-border-radius: 16px !important;
+  --panel-menuitem-border-radius: 10px !important;
+
+  /* Sidebar. */
+  --sidebar-background-color: var(--kelp-surface) !important;
+  --sidebar-text-color: var(--kelp-text) !important;
+  --sidebar-border-color: var(--kelp-hairline) !important;
+
+  /* The page area before a page has painted. */
+  --tabpanel-background-color: var(--kelp-surface) !important;
+
+  /* Focus and selection follow the system accent colour, as the shell's do. */
+  --color-accent-primary: AccentColor !important;
+  --focus-outline-color: AccentColor !important;
+}
