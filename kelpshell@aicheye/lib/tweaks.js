@@ -596,6 +596,17 @@ export class Tweaks {
      * an empty actor of the same place and size takes over as the one the
      * popup follows, so the popup stays where it is. It is kept until the
      * popup is opened again: the popup still needs it while it fades out.
+     *
+     * The empty actor is given its allocation here. The popup reads the
+     * allocation of the actor it follows when it is laid out, and it is
+     * laid out before an actor that was added after it. An actor that has
+     * never been laid out reports a box from +infinity to -infinity, the
+     * popup's place came out as NaN, and Clutter refused that box and gave
+     * what is in the popup no size. The calendar and the message list were
+     * then drawn without the card under them, and stayed on the screen
+     * after the popup had closed, because an actor of no size redraws
+     * nothing (seen 2026-11-23, with the calendar open as the last
+     * notification was cleared).
      */
     _watchSource(source) {
         if (this._sources.has(source))
@@ -614,6 +625,9 @@ export class Tweaks {
                     const [width, height] = source.get_allocation_box().get_size();
                     saved.anchor = new St.Widget({reactive: false, x, y, width, height});
                     Main.layoutManager.uiGroup.add_child(saved.anchor);
+                    saved.anchor.allocate(new Clutter.ActorBox({
+                        x1: x, y1: y, x2: x + width, y2: y + height,
+                    }));
                     menu.sourceActor = saved.anchor;
                     menu._boxPointer.setPosition(saved.anchor, menu._arrowAlignment);
                 }
