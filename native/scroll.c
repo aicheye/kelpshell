@@ -45,12 +45,14 @@
 //              is in microseconds, dx and dy are in Clutter's unit, a tenth
 //              of what a Wayland client is told. finish has bit 0 or 1 set
 //              when the horizontal or vertical scroll has ended.
-//   send       (dx, dy: double, finish: uint, x, y: double, modifiers: uint)
+//   send       (dx, dy: double, finish: uint, x, y: double, modifiers: uint,
+//               time: int64)
 //              Pass a scroll event to Clutter, as from the device of the
 //              last event offered. Called from a "scroll" handler it takes
-//              the time, the place and the modifiers of that event, and x,
-//              y and modifiers are not read. At any other time it takes
-//              the time of the call and the three as they are given.
+//              the place and the modifiers of that event, and x, y and
+//              modifiers are not read. At any other time it takes the
+//              three as they are given. time is in microseconds; 0 is the
+//              time of the event the handler runs for, or of the call.
 //   watch      (on: boolean)
 //   interrupt  (type: uint)   The Clutter type of the event.
 //   hooked     () -> boolean  False when the entry was not found in
@@ -177,17 +179,17 @@ handle_event (gpointer stage, gpointer event)
 
 static void
 kelp_scroll_send (GObject *object, double dx, double dy, guint finish,
-                  double x, double y, guint modifiers)
+                  double x, double y, guint modifiers, int64_t time)
 {
     gconstpointer from = self.current ? self.current : self.last;
-    int64_t time = g_get_monotonic_time ();
     Point at = {(float) x, (float) y};
     gpointer event;
 
     if (!from || !self.stage)
         return;
+    if (time <= 0)
+        time = self.current ? clutter_event_get_time_us (from) : g_get_monotonic_time ();
     if (self.current) {
-        time = clutter_event_get_time_us (from);
         clutter_event_get_position (from, &at);
         modifiers = clutter_event_get_state (from);
     }
@@ -381,9 +383,9 @@ kelp_scroll_class_init (gpointer klass, gpointer data)
     signal_interrupt = g_signal_new ("interrupt", type, G_SIGNAL_RUN_LAST, 0,
                                      NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_UINT);
     g_signal_new_class_handler ("send", type, action, G_CALLBACK (kelp_scroll_send),
-                                NULL, NULL, NULL, G_TYPE_NONE, 6,
+                                NULL, NULL, NULL, G_TYPE_NONE, 7,
                                 G_TYPE_DOUBLE, G_TYPE_DOUBLE, G_TYPE_UINT,
-                                G_TYPE_DOUBLE, G_TYPE_DOUBLE, G_TYPE_UINT);
+                                G_TYPE_DOUBLE, G_TYPE_DOUBLE, G_TYPE_UINT, G_TYPE_INT64);
     g_signal_new_class_handler ("watch", type, action, G_CALLBACK (kelp_scroll_watch),
                                 NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_BOOLEAN);
     g_signal_new_class_handler ("hooked", type, action, G_CALLBACK (kelp_scroll_hooked),

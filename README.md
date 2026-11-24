@@ -340,8 +340,18 @@ headless shell on 2026-11-23 with the same events sent to each).
   events of the movement after them itself, one for each frame, at the
   speed and with the friction Firefox would use, and tells the window that
   the scroll has ended once Firefox would have stopped.
-- A Firefox window gets its events as they are. So does a window of
-  another toolkit (Qt, GTK 3, a terminal), and the shell's own lists.
+- A Firefox window goes on after the fingers by itself. A window of
+  another toolkit (Qt, GTK 3, a terminal) and the shell's own lists get
+  their events as they are.
+- Firefox, GTK 4 and Chromium windows get one event for each frame of the
+  monitor. A touchpad reports about every 8 ms and a monitor shows a frame
+  every 6.9 ms (144 Hz) or 8.3 ms (120 Hz), so events passed on as they
+  come leave some frames with two and some with none. With a steady finger
+  reported every 8 ms on a 144 Hz monitor, 18 of 75 frames of a GTK 4
+  window moved nothing, and none do now (headless shell, 2026-11-24). The
+  shell reads where the scroll was one touchpad report before each frame,
+  on the line between two events, so the window follows the fingers about
+  8 ms later than before.
 - The movement stops when the fingers are back on the touchpad, a key or a
   button is pressed, or the pointer is over another window.
 

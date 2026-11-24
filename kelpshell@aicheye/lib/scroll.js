@@ -23,7 +23,9 @@
 //
 //   - While the fingers are on the touchpad, an event for a window of a
 //     toolkit in TOOLKITS is sent with its size times 4 / px, the px of that
-//     toolkit: the window then moves as far as a Firefox window would.
+//     toolkit: the window then moves as far as a Firefox window would. The
+//     events are sent one for each frame of the monitor and not as the
+//     touchpad reports them, see _stepPan().
 //   - When the fingers leave, the window is not told. This file works out
 //     the speed Firefox would go on with, from the last events as Firefox
 //     does it, and sends the events of that movement itself, one for each
@@ -32,8 +34,9 @@
 //     slow down. It is told that the scroll has ended when the speed is
 //     under the one Firefox stops at. Its own way of going on then starts
 //     from next to nothing.
-//   - A Firefox window gets its events as they are, and does all of this
-//     itself: it is what the others are measured against.
+//   - A Firefox window gets its events one for each frame too, and goes on
+//     after the fingers by itself: it is what the others are measured
+//     against.
 //   - A window of no known toolkit, and the shell's own lists, get their
 //     events as they are too.
 //
@@ -91,8 +94,15 @@ const SAMPLE_MS = 5;
 // with from the events of the time before the end: GTK 4 from the last 150
 // ms (SCROLL_CAPTURE_THRESHOLD_MS in gtkscrolledwindow.c). Told at once,
 // after fingers at 0.3 px for each ms, a GTK 4 window went on for 74 px and
-// Chrome for 14 px, where Firefox stays (measured 2026-11-23).
-const REST_MS = 200;
+// Chrome for 14 px, where Firefox stays (measured 2026-11-23). Chrome still
+// went on, for 27 px, when it was told 200 ms after an event that was one
+// frame newer than the last of the touchpad (2026-11-24).
+const REST_MS = 300;
+// ms between two reports of a touchpad, before the first two of a scroll
+// have told.
+const INPUT_MS = 8;
+// ms without a report after which the fingers count as resting.
+const IDLE_MS = 150;
 
 // px a window moves for one unit of wl_pointer.axis, by toolkit. own: the
 // window goes on after the fingers as Firefox does, by itself.
@@ -245,12 +255,13 @@ export class Scroll {
 
     disable() {
         this._serial++;
+        this._dropPan();
         this._endFling(true);
         this._native?.disconnectObject(this);
         this._native = null;
         global.display.disconnectObject(this);
         this._byPid.clear();
-        this._pan = this._carry = null;
+        this._carry = null;
     }
 
     /** After a change of configuration: the files are read again. */
@@ -318,71 +329,235 @@ export class Scroll {
         if (flung)
             this._endFling(flung.window !== window);
 
-        if (!toolkit || toolkit.own) {
-            this._pan = null;
+        let pan = this._pan;
+        if (pan && (pan.window !== window || pan.toolkit !== toolkit)) {
+            this._dropPan();
+            pan = null;
+        }
+        if (!toolkit) {
             if (sx === 1 && sy === 1)
                 return false;
-            native.emit('send', dx * sx, dy * sy, finish, 0, 0, 0);
+            native.emit('send', dx * sx, dy * sy, finish, 0, 0, 0, 0);
             return true;
         }
 
         const pxPerUnit = this._prefs['apz.gtk.pangesture.pixel_delta_mode_multiplier'] / 10;
         const k = pxPerUnit / toolkit.px;
-        // As Firefox would see the event: px of the monitor, and the time in
-        // whole ms, which is all a Wayland client is given.
         const scale = global.display.get_monitor_scale(Math.max(0, window.get_monitor()));
-        const px = dx * 10 * sx * pxPerUnit * scale;
-        const py = dy * 10 * sy * pxPerUnit * scale;
-        const time = Math.floor(timeUs / 1000);
-        let pan = this._pan;
-        if (!pan || pan.window !== window) {
+        const t = timeUs / 1000;
+        if (!pan) {
             pan = this._pan = {
-                window, x: 0, y: 0, sampleTime: time, sampleX: 0, sampleY: 0, speeds: [],
+                window, toolkit, scale,
+                // What Firefox would measure, see below.
+                x: 0, y: 0, sampleTime: Math.floor(t), sampleX: 0, sampleY: 0, speeds: [],
+                // What the window is sent, see _stepPan(): where the scroll
+                // was at the time of each event, in Clutter's unit, and how
+                // much of it has been sent.
+                points: [{t: t - INPUT_MS, x: 0, y: 0}],
+                atX: 0, atY: 0, sentX: 0, sentY: 0, sentTime: 0,
+                period: INPUT_MS, lastTime: 0, timeline: null, steps: 0, clock: 0,
+                ending: null,
             };
         }
-        pan.x += px;
-        pan.y += py;
-        // The event that ends the scroll moves nothing, and Firefox measures
-        // no speed from it. Counted as a speed of none, it made the mean of
-        // the last five a fifth too low.
-        const moved = !finish || dx !== 0 || dy !== 0;
-        if (moved && time > pan.sampleTime + SAMPLE_MS) {
-            const dt = time - pan.sampleTime;
-            pan.speeds.push({time, x: (pan.x - pan.sampleX) / dt, y: (pan.y - pan.sampleY) / dt});
-            if (pan.speeds.length > this._prefs['apz.max_velocity_queue_size'])
-                pan.speeds.shift();
-            pan.sampleTime = time;
-            pan.sampleX = pan.x;
-            pan.sampleY = pan.y;
+        // The fingers moved again before the last of the scroll was sent.
+        pan.ending = null;
+
+        const moved = dx !== 0 || dy !== 0;
+        if (moved) {
+            pan.atX += dx * sx * k;
+            pan.atY += dy * sy * k;
+            pan.points.push({t, x: pan.atX, y: pan.atY});
+            if (pan.points.length > 12)
+                pan.points.shift();
+            // The time between two reports: the longest of the last ones.
+            // A touchpad that reports every 6 to 10 ms is read 10 ms back,
+            // so that the report after the time read is there. A longer
+            // wait is the fingers at rest.
+            const gap = t - pan.lastTime;
+            if (pan.lastTime && gap > 1 && gap < 25)
+                pan.period = Math.max(gap, pan.period + (gap - pan.period) * 0.15);
+            pan.lastTime = t;
         }
 
-        if (!finish) {
-            this._send(window, toolkit, dx * sx * k, dy * sy * k, 0, 0, 0);
-            return true;
+        if (!toolkit.own) {
+            // As Firefox would see the event: px of the monitor, and the
+            // time in whole ms, which is all a Wayland client is given.
+            const time = Math.floor(t);
+            pan.x += dx * 10 * sx * pxPerUnit * scale;
+            pan.y += dy * 10 * sy * pxPerUnit * scale;
+            // The event that ends the scroll moves nothing, and Firefox
+            // measures no speed from it. Counted as a speed of none, it made
+            // the mean of the last five a fifth too low.
+            if ((moved || !finish) && time > pan.sampleTime + SAMPLE_MS) {
+                const dt = time - pan.sampleTime;
+                pan.speeds.push({time, x: (pan.x - pan.sampleX) / dt, y: (pan.y - pan.sampleY) / dt});
+                if (pan.speeds.length > this._prefs['apz.max_velocity_queue_size'])
+                    pan.speeds.shift();
+                pan.sampleTime = time;
+                pan.sampleX = pan.x;
+                pan.sampleY = pan.y;
+            }
         }
 
-        // The fingers have left.
-        this._pan = null;
-        if (dx !== 0 || dy !== 0)
-            this._send(window, toolkit, dx * sx * k, dy * sy * k, 0, 0, 0);
-        const recent = pan.speeds.filter(s =>
-            time - s.time < this._prefs['apz.velocity_relevance_time_ms']);
-        const mean = axis => recent.reduce((sum, s) => sum + s[axis], 0) / Math.max(1, recent.length);
-        const vx = mean('x');
-        const vy = mean('y');
-        const goesOn = this._prefs['apz.gtk.kinetic_scroll.enabled'] &&
-            Math.hypot(vx, vy) > this._prefs['apz.fling_min_velocity_threshold'];
-        this._startFling(window, toolkit, scale, goesOn ? vx : 0, goesOn ? vy : 0);
+        if (finish) {
+            // The fingers have left. What the window has not been sent yet
+            // goes out with the next frames, and then _endPan() runs.
+            let vx = 0;
+            let vy = 0;
+            if (!toolkit.own) {
+                const time = Math.floor(t);
+                const recent = pan.speeds.filter(sample =>
+                    time - sample.time < this._prefs['apz.velocity_relevance_time_ms']);
+                for (const sample of recent) {
+                    vx += sample.x / recent.length;
+                    vy += sample.y / recent.length;
+                }
+                if (!this._prefs['apz.gtk.kinetic_scroll.enabled'] ||
+                    Math.hypot(vx, vy) <= this._prefs['apz.fling_min_velocity_threshold'])
+                    vx = vy = 0;
+            }
+            pan.ending = {finish, vx, vy};
+        }
+        this._runPan(pan);
         return true;
+    }
+
+    _runPan(pan) {
+        if (pan.timeline)
+            return;
+        pan.steps = 0;
+        pan.timeline = new Clutter.Timeline({
+            actor: pan.window.get_compositor_private(), duration: 1000, repeat_count: -1,
+        });
+        pan.timeline.connect('new-frame', timeline => {
+            try {
+                if (this._pan === pan)
+                    this._stepPan(pan, timeline);
+            } catch (e) {
+                console.error(e);
+                this._dropPan();
+            }
+        });
+        pan.timeline.start();
+    }
+
+    /**
+     * One frame of the scroll the fingers are making: the window is sent
+     * the way the fingers went in the time of one frame, as one event.
+     *
+     * A touchpad reports the fingers about every 8 ms and a monitor shows a
+     * frame every 6.9 ms (144 Hz) or 8.3 ms (120 Hz), so passed on as they
+     * come, the events are not one for each frame: a window gets two in one
+     * frame and none in the next, and what it draws jumps and waits for the
+     * same movement of the fingers. With events 8 ms apart on a 120 Hz
+     * monitor that was one frame of twice the distance in about every 25,
+     * in Firefox, GTK 4 and Chrome alike (measured 2026-11-24; the user:
+     * "the scroll bar definitely stutters on firefox"). The time an event
+     * spends in the shell's JavaScript, up to 1.3 ms in 3500 events, can
+     * move one more over the edge of a frame.
+     *
+     * Here the events only say where the scroll was at which time. Each
+     * frame, the place it had one touchpad report before the time of the
+     * frame is read from them, between two events on a straight line, and
+     * the window is sent the way from the place of the frame before. The
+     * frames are a whole number of frame times apart by the frame clock, as
+     * in _stepFling(). The price is that one report, about 8 ms, between
+     * the fingers and the window: a place between two events is not known
+     * before the second one is there.
+     */
+    _stepPan(pan, timeline) {
+        const frame = 1000 / (timeline.frame_clock?.get_refresh_rate() || 60);
+        const now = GLib.get_monotonic_time() / 1000;
+        const frames = pan.steps++ === 0
+            ? 1 : Math.max(1, Math.round(timeline.get_delta() / frame));
+        pan.clock += frames * frame;
+        // The first frame, or the clock of the frames has left the time.
+        if (pan.steps === 1 || Math.abs(pan.clock - now) > 2 * frame)
+            pan.clock = now;
+        const at = pan.clock - pan.period;
+
+        // Where the scroll was at that time: on the line between the two
+        // events around it, and where the last event has it from then on.
+        const points = pan.points;
+        const last = points[points.length - 1];
+        let x = last.x;
+        let y = last.y;
+        if (at < last.t) {
+            let i = points.length - 1;
+            while (i > 0 && points[i - 1].t > at)
+                i--;
+            const b = points[i];
+            const a = points[Math.max(0, i - 1)];
+            const share = b.t > a.t ? Math.max(0, (at - a.t) / (b.t - a.t)) : 0;
+            x = a.x + (b.x - a.x) * share;
+            y = a.y + (b.y - a.y) * share;
+        }
+        if (x !== pan.sentX || y !== pan.sentY) {
+            const [px, py, modifiers] = global.get_pointer();
+            // The time the scroll was at this place: Firefox measures the
+            // speed it goes on with from the way and the time between two
+            // events. Times go up, a ms apart at the least.
+            pan.sentTime = Math.max(pan.sentTime + 1, Math.min(at, last.t));
+            this._send(pan.window, pan.toolkit, x - pan.sentX, y - pan.sentY,
+                px, py, modifiers, Math.round(pan.sentTime * 1000));
+            pan.sentX = x;
+            pan.sentY = y;
+        }
+        if (at < last.t)
+            return;
+        // All of it is sent.
+        if (pan.ending)
+            this._endPan(pan, Math.min(at - last.t, frames * frame));
+        else if (now - pan.lastTime > IDLE_MS)
+            this._stopPan(pan);
+    }
+
+    /** The fingers rest on the touchpad: no frames until they move again. */
+    _stopPan(pan) {
+        pan.timeline?.stop();
+        pan.timeline = null;
+    }
+
+    /** Forget the scroll of the fingers as it is, with nothing sent. */
+    _dropPan() {
+        if (this._pan)
+            this._stopPan(this._pan);
+        this._pan = null;
+    }
+
+    /**
+     * The fingers have left and the window has all of their scroll. over:
+     * the ms of this frame that came after the last of it.
+     *
+     * The movement after the fingers starts in the same frame, for those
+     * ms. Started with the next frame, it left this one with the rest of
+     * the fingers' way alone: 3.8 px between frames of 8 px (measured
+     * 2026-11-24).
+     */
+    _endPan(pan, over) {
+        const {finish, vx, vy} = pan.ending;
+        this._dropPan();
+        if (pan.toolkit.own) {
+            const [x, y, modifiers] = global.get_pointer();
+            this._native.emit('send', 0, 0, finish, x, y, modifiers,
+                Math.round((pan.sentTime + 1) * 1000));
+            return;
+        }
+        this._startFling(pan.window, pan.toolkit, pan.scale, vx, vy, pan.sentTime);
+        if (over > 0 && this._fling?.timeline)
+            this._advanceFling(this._fling, over);
     }
 
     // ---- after the fingers ----
 
-    /** With no speed: only the wait of REST_MS before the window is told. */
-    _startFling(window, toolkit, scale, vx, vy) {
+    /**
+     * With no speed: only the wait of REST_MS before the window is told.
+     * time: of the last event the window was sent, in ms.
+     */
+    _startFling(window, toolkit, scale, vx, vy, time) {
         const fling = this._fling = {
-            window, toolkit, scale, vx, vy, timeline: null, restId: 0,
-            last: GLib.get_monotonic_time() / 1000,
+            window, toolkit, scale, vx, vy, timeline: null, restId: 0, steps: 0,
+            time: time || GLib.get_monotonic_time() / 1000,
         };
         this._native.emit('watch', true);
         if (vx === 0 && vy === 0) {
@@ -394,9 +569,9 @@ export class Scroll {
         fling.timeline = new Clutter.Timeline({
             actor: window.get_compositor_private(), duration: 1000, repeat_count: -1,
         });
-        fling.timeline.connect('new-frame', () => {
+        fling.timeline.connect('new-frame', timeline => {
             try {
-                this._stepFling();
+                this._stepFling(timeline);
             } catch (e) {
                 console.error(e);
                 this._endFling(true);
@@ -430,13 +605,32 @@ export class Scroll {
         });
     }
 
-    _stepFling() {
+    /**
+     * One frame of the movement. The time it covers is a whole number of
+     * frames of the monitor, from the frame clock: one, or more when the
+     * shell has left frames out.
+     *
+     * Until 2026-11-24 it was the time since the step before, read from the
+     * clock when the step ran. The frames of a monitor are shown the same
+     * time apart, and Mutter does not start its work for them the same time
+     * apart: it starts as late as the work of the last frames allows. A
+     * step that ran 2 ms late moved the window by a quarter more than its
+     * frame, and the next one by as much less (the user: "i occasionally
+     * feel stutters"). With steps delayed by 0 to 4 ms in the headless
+     * shell, the events sent were off the mean of their two neighbours by
+     * 22% on average and by up to 112%, and are by nothing now.
+     */
+    _stepFling(timeline) {
         const fling = this._fling;
-        const now = GLib.get_monotonic_time() / 1000;
-        const dt = now - fling.last;
-        if (dt <= 0)
-            return;
-        fling.last = now;
+        const frame = 1000 / (timeline.frame_clock?.get_refresh_rate() || 60);
+        // The first step has no step before it.
+        const frames = fling.steps++ === 0
+            ? 1 : Math.max(1, Math.round(timeline.get_delta() / frame));
+        this._advanceFling(fling, frames * frame);
+    }
+
+    /** Move on by dt ms. */
+    _advanceFling(fling, dt) {
         // DesktopFlingPhysics::Sample in Firefox.
         const friction = this._prefs['apz.fling_friction'];
         const stopped = this._prefs['apz.fling_stopped_threshold'];
@@ -455,8 +649,10 @@ export class Scroll {
         }
         // px of the monitor to Clutter's unit for this toolkit.
         const unit = fling.scale * fling.toolkit.px * 10;
+        fling.time += dt;
         this._send(fling.window, fling.toolkit,
-            fling.vx * dt / unit, fling.vy * dt / unit, x, y, modifiers);
+            fling.vx * dt / unit, fling.vy * dt / unit, x, y, modifiers,
+            Math.round(fling.time * 1000));
     }
 
     /**
@@ -470,7 +666,7 @@ export class Scroll {
      * its way through Xwayland the number comes out a little under now and
      * then, and Chromium then drops a whole px.
      */
-    _send(window, toolkit, dx, dy, x, y, modifiers) {
+    _send(window, toolkit, dx, dy, x, y, modifiers, timeUs) {
         if (window.get_client_type() === Meta.WindowClientType.X11) {
             const px = toolkit.px * 10;
             let carry = this._carry;
@@ -487,7 +683,7 @@ export class Scroll {
             dx = sentX / px;
             dy = sentY / px;
         }
-        this._native.emit('send', dx, dy, 0, x, y, modifiers);
+        this._native.emit('send', dx, dy, 0, x, y, modifiers, timeUs);
     }
 
     /** tell: let the window know that the scroll has ended. */
@@ -502,7 +698,7 @@ export class Scroll {
         this._native?.emit('watch', false);
         if (tell && this._native) {
             const [x, y, modifiers] = global.get_pointer();
-            this._native.emit('send', 0, 0, BOTH_AXES, x, y, modifiers);
+            this._native.emit('send', 0, 0, BOTH_AXES, x, y, modifiers, 0);
         }
     }
 }
