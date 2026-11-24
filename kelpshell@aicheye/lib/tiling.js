@@ -989,6 +989,7 @@ class Tile {
             this.w.set(frame.width);
             this.h.set(frame.height);
             clearClip(actor);
+            this._syncDialogs(null);
             if (this.wm.focusTile === this)
                 this.wm.ring.sync();
             return;
@@ -1007,6 +1008,8 @@ class Tile {
         let kx = frame.width > 0 ? k * w / frame.width : k;
         let ky = frame.height > 0 ? k * h / frame.height : k;
         if (this._park(actor, frame, buffer, vx + w * (1 - k) / 2 - frame.x, kx, w * k)) {
+            // A dialog wider than its window can still reach into the view.
+            this._syncDialogs([vx + w / 2, vy + h / 2]);
             if (this.wm.focusTile === this) {
                 const d = this.drawn();
                 this.wm.ring.place(d.x, d.y, d.width, d.height);
@@ -1038,10 +1041,68 @@ class Tile {
         const clip = this.strip.clipFor(left, buffer.width * kx);
         setClip(actor, clip && [clip[0] / kx, clip[1] / kx],
             Math.min(0, frame.y - buffer.y), buffer.height);
+        this._syncDialogs([vx + w / 2, vy + h / 2]);
 
         if (this.wm.focusTile === this) {
             const d = this.drawn();
             this.wm.ring.place(d.x, d.y, d.width, d.height);
+        }
+    }
+
+    /**
+     * Draw the dialogs attached to the window around the middle of where
+     * the window is drawn. middle: [x, y] on the stage. null: the window is
+     * drawn at its frame, and so are they.
+     *
+     * Mutter keeps an attached dialog in the middle of its parent's frame,
+     * and moves it when that frame moves. The window is not drawn at its
+     * frame while it is on its way to a new place, and never when part of
+     * its place is out of the view: the frame stays inside the work area
+     * (applyFrame) and the actor is moved from there. A file chooser of a
+     * window that had been scrolled half out of the view stayed in the
+     * middle of the monitor, over the window that had come in beside it.
+     *
+     * The dialog's actor is moved by the same distance, so it is drawn and
+     * takes its clicks in the middle of the window, and it is cut at the
+     * edges of the view as the window is. Rounded as Mutter rounds, so a
+     * dialog of a window that is drawn at its frame is not moved at all.
+     */
+    _syncDialogs(middle) {
+        const dialogs = this.wm.attached.get(this.win);
+        if (!dialogs)
+            return;
+        for (const win of dialogs) {
+            const actor = win.get_compositor_private();
+            if (!actor)
+                continue;
+            if (!middle || !this.strip) {
+                actor.translation_x = 0;
+                actor.translation_y = 0;
+                clearClip(actor);
+            } else {
+                const frame = win.get_frame_rect();
+                const buffer = win.get_buffer_rect();
+                const top = Math.min(0, frame.y - buffer.y);
+                let tx = Math.floor(middle[0]) - Math.floor(frame.width / 2) - frame.x;
+                const ty = Math.floor(middle[1]) - Math.floor(frame.height / 2) - frame.y;
+                let clip = this.strip.clipFor(buffer.x + tx, buffer.width);
+                if (clip && clip[1] <= 0) {
+                    // Nothing of it is in the view: to the left of every
+                    // monitor, as its window is (_park).
+                    let leftmost = 0;
+                    for (const m of Main.layoutManager.monitors)
+                        leftmost = Math.min(leftmost, m.x);
+                    tx = leftmost - PARK_GAP - buffer.width - buffer.x;
+                    clip = [0, 0];
+                }
+                if (actor.translation_x !== tx)
+                    actor.translation_x = tx;
+                if (actor.translation_y !== ty)
+                    actor.translation_y = ty;
+                setClip(actor, clip, top, buffer.height);
+            }
+            if (this.wm.ring.win === win)
+                this.wm.ring.sync();
         }
     }
 
@@ -1150,6 +1211,8 @@ class Tile {
         this._pendingId = 0;
         this.win.disconnectObject(this);
         this.wm.animator.remove(this);
+        if (resetActor)
+            this._syncDialogs(null);
         if (resetActor && this.actor) {
             this.actor.translation_x = 0;
             this.actor.translation_y = 0;
@@ -3131,8 +3194,17 @@ class FocusRing {
             return;
         }
         const tile = this.wm.tiles.get(this.win);
-        const frame = tile && tile.target && !tile.grabbed
+        let frame = tile && tile.target && !tile.grabbed
             ? tile.drawn() : tile?.heldRect() ?? visibleRect(this.wm.config, this.win);
+        // An attached dialog is drawn away from its frame, see
+        // Tile._syncDialogs.
+        const moved = !tile && this.wm.hostOf(this.win) ? this.win.get_compositor_private() : null;
+        if (moved) {
+            frame = {
+                x: frame.x + moved.translation_x, y: frame.y + moved.translation_y,
+                width: frame.width, height: frame.height,
+            };
+        }
         this.place(frame.x, frame.y, frame.width, frame.height);
         this.restack();
     }
@@ -3165,7 +3237,7 @@ class FocusRing {
         this.actor.set_scale(1, 1);
         this.actor.translation_x = 0;
         this.actor.translation_y = 0;
-        const strip = this.wm.tiles.get(this.win)?.strip;
+        const strip = (this.wm.tiles.get(this.win) ?? this.wm.hostOf(this.win))?.strip;
         const clip = strip?.clipFor(x - w, width + 2 * w);
         // Nothing of the window is in the view. St asks for a redraw of the
         // whole ring whatever its clip, which can be on the next monitor.
@@ -3288,6 +3360,10 @@ export class Tiling {
         this.strips = new Map();
         this.floating = new Set();     // floated by hand in this session
         this.raised = new Set();       // put over the other windows by layout.above
+        // window -> the dialogs attached to it and to its dialogs, and each
+        // of those dialogs -> that window. See Tile._syncDialogs.
+        this.attached = new Map();
+        this._hosts = new Map();
         this._recentring = new Map();  // window -> id of its size-changed handler, see _floatLate
         this.refused = new Set();      // did not take the size of a column, see _refusedSize
         this.forced = new Set();       // tiled by hand against the automatic rules
@@ -3491,6 +3567,8 @@ export class Tiling {
         this.strips.clear();
         this.floating.clear();
         this.raised.clear();
+        this.attached.clear();
+        this._hosts.clear();
         this.refused.clear();
         this.forced.clear();
         this._born.clear();
@@ -4036,6 +4114,63 @@ export class Tiling {
         return f.width < t.width * REFUSED_SIZE || f.height < t.height * REFUSED_SIZE;
     }
 
+    /**
+     * The window an attached dialog is drawn with: its parent, or the
+     * parent of the dialog it is attached to. null for any other window.
+     */
+    _hostWindow(win) {
+        if (win.is_override_redirect())
+            return null;
+        let host = win;
+        for (let n = 0; n < 8 && host?.is_attached_dialog(); n++)
+            host = host.get_transient_for();
+        return host && host !== win ? host : null;
+    }
+
+    /** The tile of the window an attached dialog is drawn with, or null. */
+    hostOf(win) {
+        const host = this._hosts.get(win);
+        return host ? this.tiles.get(host) ?? null : null;
+    }
+
+    /**
+     * List a window as a dialog of the window it is attached to, or take it
+     * off the list when it is attached to none. A window is asked when it
+     * is shown, when its type changes (a client can say that it is modal
+     * after it has opened) and when it takes the focus.
+     */
+    _attach(win) {
+        const host = this._hostWindow(win);
+        if (host === (this._hosts.get(win) ?? null))
+            return;
+        this._detach(win);
+        if (!host)
+            return;
+        this._hosts.set(win, host);
+        if (!this.attached.has(host))
+            this.attached.set(host, new Set());
+        this.attached.get(host).add(win);
+        this.tiles.get(host)?.sync();
+    }
+
+    /** reset: the dialog is drawn at its frame again. Not for one that is closing. */
+    _detach(win, reset = true) {
+        const host = this._hosts.get(win);
+        if (!host)
+            return;
+        this._hosts.delete(win);
+        const dialogs = this.attached.get(host);
+        dialogs?.delete(win);
+        if (dialogs?.size === 0)
+            this.attached.delete(host);
+        const actor = reset ? win.get_compositor_private() : null;
+        if (actor) {
+            actor.translation_x = 0;
+            actor.translation_y = 0;
+            clearClip(actor);
+        }
+    }
+
     _watch(win) {
         win.connectObject(
             'configure', (_w, config) => this._onConfigure(win, config),
@@ -4044,7 +4179,11 @@ export class Tiling {
                 this._retile(win);
                 this._centreNew(win);
                 this._settleLater(win);
+                this._attach(win);
             },
+            'position-changed', () => this.hostOf(win)?.sync(),
+            'size-changed', () => this.hostOf(win)?.sync(),
+            'notify::window-type', () => this._attach(win),
             'unmanaging', () => this._onUnmanaging(win),
             'workspace-changed', () => this._rehome(win),
             'notify::minimized', () => this._onMinimized(win),
@@ -4460,6 +4599,11 @@ export class Tiling {
         // segfaults in meta_window_update_monitor() when a window that is
         // being unmanaged is moved, and activating the neighbour runs a layout.
         this._untrack(win, true);
+        // Mutter closes the dialogs attached to a window with it.
+        this._detach(win, false);
+        for (const dialog of this.attached.get(win) ?? [])
+            this._hosts.delete(dialog);
+        this.attached.delete(win);
         this.floating.delete(win);
         this.raised.delete(win);
         this.refused.delete(win);
@@ -4587,6 +4731,8 @@ export class Tiling {
         // The windows that are open and not on a strip, see layout.above.
         for (const win of wins)
             this._raise(win);
+        for (const win of wins)
+            this._attach(win);
         // The ring is on the window that gets the focus back from the lock
         // screen with no fade, see _onFocus.
         this._resumed = still;
@@ -4610,8 +4756,15 @@ export class Tiling {
             if (monitor >= 0)
                 this._activeMonitor = monitor;
         }
-        const tile = win ? this.tiles.get(win) ?? null : null;
-        this.focusTile = tile;
+        const focused = win ? this.tiles.get(win) ?? null : null;
+        this.focusTile = focused;
+        // An attached dialog is drawn in the middle of its window, so the
+        // view shows that window when the dialog takes the focus. Without
+        // this, the dialog of a window that is out of the view would have
+        // the keyboard with nothing of it to see.
+        if (win && !focused)
+            this._attach(win);
+        const tile = focused ?? (win ? this.hostOf(win) : null);
         if (tile)
             this._makeCurrent(tile);
         if (tile?.strip) {
@@ -4626,7 +4779,7 @@ export class Tiling {
             // space past an end. The least scrolling that shows it would
             // put it at the right edge. Any other window that takes the
             // focus is shown with the least scrolling.
-            if (tile.fresh && !tile.column.pending && this._isNew(win)) {
+            if (focused && tile.fresh && !tile.column.pending && this._isNew(win)) {
                 tile.fresh = false;
                 strip.place(tile.column, 'middle');
             } else {
