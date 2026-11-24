@@ -107,6 +107,10 @@ const FILL_INSET = 4;
 // that program's window.
 const EXPECT_WINDOW_MS = 10000;
 
+// A window that is on no strip, moved or sized by a key (Floater):
+const FLOAT_ANSWER_MS = 400;        // its client has this long to take a new size
+const FLOAT_STEP = 0.05;            // of the width of the work area: one press of a move key
+const FLOAT_MIN_HEIGHT = 120;       // px, the least the height keys give it
 const SWIPE_FINGERS = 3;
 
 // Dragging a window. The pointer has to travel this far before a drop place
@@ -209,6 +213,24 @@ function rectKey(r) {
 
 function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
+}
+
+/**
+ * The frame to ask a window for so that the part of it that is drawn is
+ * rect, see visibleRect() in crop.js: larger by the edges that are cut off,
+ * and below a drawn title bar.
+ */
+function frameFor(config, win, rect) {
+    const c = cropOf(config, win);
+    const top = c.top - c.bar;
+    return {
+        x: rect.x - c.left, y: rect.y - top,
+        width: rect.width + c.left + c.right, height: rect.height + top + c.bottom,
+    };
+}
+
+function isMaximized(win) {
+    return win.get_maximize_flags() !== Meta.MaximizeFlags.NONE;
 }
 
 function minSize(win) {
@@ -1223,6 +1245,182 @@ class Tile {
             }
             clearClip(this.actor);
         }
+    }
+}
+
+/**
+ * A window that is on no strip, on its way to a place or a size a key gave
+ * it. The frame is asked for at once, and the window is drawn from where it
+ * was to where it goes on the springs the tiles use.
+ *
+ * The springs hold the middle and the size of what is drawn. The size
+ * follows the frame, which changes when the client has drawn the new one,
+ * 30 to 150 ms after the key. The middle starts with the key. With the left
+ * edge on a spring in its place, a window that changes its width around its
+ * middle would move to the left first and then grow to the right.
+ */
+class Floater {
+    constructor(wm, win) {
+        this.wm = wm;
+        this.win = win;
+        this.actor = win.get_compositor_private();
+        const r = visibleRect(wm.config, win);
+        this.cx = new Spring(r.x + r.width / 2);
+        this.cy = new Spring(r.y + r.height / 2);
+        this.w = new Spring(r.width);
+        this.h = new Spring(r.height);
+        // The place asked for last, as visibleRect() gives one. The next
+        // key press starts from it, so a held key goes on from where the
+        // window is going and not from where it is drawn.
+        this.rect = r;
+        this._pending = false;   // the client has not taken the size asked for
+        this._pendingId = 0;
+        win.connectObject(
+            'position-changed', () => this._onFrame(),
+            'size-changed', () => this._onFrame(),
+            this);
+    }
+
+    /** Ask for a place: {x, y, width, height} of the part that is drawn. */
+    moveTo(rect) {
+        const win = this.win;
+        const q = frameFor(this.wm.config, win, rect);
+        const frame = win.get_frame_rect();
+        const resized = q.width !== frame.width || q.height !== frame.height;
+        this.rect = rect;
+        this._pending = resized;
+        if (this._pendingId)
+            GLib.source_remove(this._pendingId);
+        this._pendingId = 0;
+        if (resized) {
+            // A client that takes another size than the one asked for, or
+            // none, keeps the frame it has.
+            this._pendingId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FLOAT_ANSWER_MS, () => {
+                this._pendingId = 0;
+                this._settled();
+                this._retarget();
+                return GLib.SOURCE_REMOVE;
+            });
+            win.move_resize_frame(true, q.x, q.y, q.width, q.height);
+        } else {
+            win.move_frame(true, q.x, q.y);
+            // Where Mutter put it: it keeps a title bar on the monitor.
+            this.rect = visibleRect(this.wm.config, win);
+        }
+        this._retarget();
+    }
+
+    _onFrame() {
+        const frame = visibleRect(this.wm.config, this.win);
+        if (this._pending && Math.abs(frame.width - this.rect.width) <= 1 &&
+            Math.abs(frame.height - this.rect.height) <= 1)
+            this._settled();
+        this._retarget();
+    }
+
+    /** The frame the window has now is the one it keeps. */
+    _settled() {
+        this._pending = false;
+        if (this._pendingId)
+            GLib.source_remove(this._pendingId);
+        this._pendingId = 0;
+        this.rect = visibleRect(this.wm.config, this.win);
+    }
+
+    _retarget() {
+        if (this.dead)
+            return;
+        const frame = visibleRect(this.wm.config, this.win);
+        // Mutter moves a window that was asked for a new size when its
+        // client has answered. Until then the frame is the old one.
+        const to = this._pending ? this.rect : frame;
+        this.cx.target = to.x + to.width / 2;
+        this.cy.target = to.y + to.height / 2;
+        this.w.target = frame.width;
+        this.h.target = frame.height;
+        this.wm.animator.add(this);
+        this.sync();
+    }
+
+    /** Where the window is drawn now: {x, y, width, height}. */
+    drawn() {
+        return {
+            x: Math.round(this.cx.value - this.w.value / 2),
+            y: Math.round(this.cy.value - this.h.value / 2),
+            width: Math.round(this.w.value),
+            height: Math.round(this.h.value),
+        };
+    }
+
+    /** Scale and translate the actor from its real frame to where it is drawn. */
+    sync() {
+        const actor = this.actor;
+        if (!actor || this.dead)
+            return;
+        // The shell animates this actor: a window that is minimized, or one
+        // that enters fullscreen. It is left to the shell.
+        if (actor.__animationInfo || actor.get_transition('scale-x') ||
+            actor.get_transition('scale-y')) {
+            this.stop();
+            return;
+        }
+        const frame = visibleRect(this.wm.config, this.win);
+        const buffer = this.win.get_buffer_rect();
+        const d = this.drawn();
+        const kx = frame.width > 0 ? this.w.value / frame.width : 1;
+        const ky = frame.height > 0 ? this.h.value / frame.height : 1;
+        if ((kx !== 1 || ky !== 1) && buffer.width > 0 && buffer.height > 0) {
+            actor.set_pivot_point(
+                (frame.x - buffer.x) / buffer.width,
+                (frame.y - buffer.y) / buffer.height);
+        }
+        if (actor.scale_x !== kx || actor.scale_y !== ky)
+            actor.set_scale(kx, ky);
+        actor.translation_x = d.x - frame.x;
+        actor.translation_y = d.y - frame.y;
+        if (this.wm.ring.win === this.win)
+            this.wm.ring.place(d.x, d.y, d.width, d.height);
+    }
+
+    tick(dt, omega, zeta) {
+        if (this.dead)
+            return false;
+        const springs = [this.cx, this.cy, this.w, this.h];
+        for (const spring of springs)
+            spring.step(dt, omega, zeta);
+        if (!this._pending && springs.every(s => s.atRest)) {
+            this.stop();
+            return false;
+        }
+        this.sync();
+        return !this.dead;
+    }
+
+    /**
+     * The window is drawn at its frame again. resetActor is false when the
+     * window is closing, so it does not jump.
+     */
+    stop(resetActor = true) {
+        if (this.dead)
+            return;
+        this.dead = true;
+        if (this._pendingId)
+            GLib.source_remove(this._pendingId);
+        this._pendingId = 0;
+        this.win.disconnectObject(this);
+        this.wm.animator.remove(this);
+        this.wm.floaters.delete(this.win);
+        const actor = this.actor;
+        if (!resetActor || !actor)
+            return;
+        actor.translation_x = 0;
+        actor.translation_y = 0;
+        if (!actor.get_transition('scale-x') && !actor.get_transition('scale-y')) {
+            actor.set_scale(1, 1);
+            actor.set_pivot_point(0, 0);
+        }
+        if (this.wm.ring.win === this.win)
+            this.wm.ring.sync();
     }
 }
 
@@ -3194,8 +3392,11 @@ class FocusRing {
             return;
         }
         const tile = this.wm.tiles.get(this.win);
+        // A window on no strip that a key is moving, see Floater.
+        const floater = tile ? null : this.wm.floaters.get(this.win);
         let frame = tile && tile.target && !tile.grabbed
-            ? tile.drawn() : tile?.heldRect() ?? visibleRect(this.wm.config, this.win);
+            ? tile.drawn()
+            : tile?.heldRect() ?? floater?.drawn() ?? visibleRect(this.wm.config, this.win);
         // An attached dialog is drawn away from its frame, see
         // Tile._syncDialogs.
         const moved = !tile && this.wm.hostOf(this.win) ? this.win.get_compositor_private() : null;
@@ -3359,6 +3560,10 @@ export class Tiling {
         this.tiles = new Map();
         this.strips = new Map();
         this.floating = new Set();     // floated by hand in this session
+        this.floaters = new Map();     // window on no strip -> its Floater, while a key moves it
+        // window on no strip -> the place it had before maximize-column
+        // made it fill the view, see _toggleFloatFill.
+        this._floatRestore = new WeakMap();
         this.raised = new Set();       // put over the other windows by layout.above
         // window -> the dialogs attached to it and to its dialogs, and each
         // of those dialogs -> that window. See Tile._syncDialogs.
@@ -3525,6 +3730,8 @@ export class Tiling {
             this._stopRecentring(win);
         this._endDrag();
 
+        for (const floater of [...this.floaters.values()])
+            floater.stop();
         for (const tile of this.tiles.values())
             tile.destroy(!keep);
         if (!keep) {
@@ -4454,6 +4661,8 @@ export class Tiling {
         const strip = this._stripFor(win);
         if (!strip)
             return null;
+        // The tile writes the scale and the place of the same actor.
+        this.floaters.get(win)?.stop();
         const tile = new Tile(this, win);
         // What the strip showed before this window. _untrack puts it back
         // when a new window turns out to float.
@@ -4589,6 +4798,7 @@ export class Tiling {
         this._rememberClosed(win);
         // Before the focus moves on and takes the ring with it.
         this.ring.leaving(win);
+        this.floaters.get(win)?.stop(false);
         const tile = this.tiles.get(win);
         const strip = tile?.strip;
         // Hand focus to the neighbour so the view does not jump to whichever
@@ -4952,6 +5162,7 @@ export class Tiling {
     }
 
     _onMinimized(win) {
+        this.floaters.get(win)?.stop();
         if (win.minimized)
             this._untrack(win, true);
         else
@@ -4959,6 +5170,7 @@ export class Tiling {
     }
 
     _onFullscreen(win) {
+        this.floaters.get(win)?.stop();
         const tile = this.tiles.get(win);
         if (!tile) {
             // A window that was fullscreen when it opened was not asked
@@ -5032,6 +5244,8 @@ export class Tiling {
     }
 
     _onGrabBegin(win, op) {
+        // The pointer has the window from here: it is drawn at its frame.
+        this.floaters.get(win)?.stop();
         const tile = this.tiles.get(win);
         if (!tile)
             return;
@@ -5588,7 +5802,8 @@ export class Tiling {
     /**
      * Left and right along the strip. Past its first or last column, or on
      * a monitor with no tiled window, the focus goes to the monitor on that
-     * side: to the column nearest the one it came from.
+     * side: to the column nearest the one it came from. A window that is on
+     * no strip is between the columns, see _focusFloat().
      */
     focusColumn(delta) {
         const strip = this.activeStrip();
@@ -5596,6 +5811,8 @@ export class Tiling {
             return;
         const n = strip.columns.length;
         if (n > 0 && strip.coverStep(delta))
+            return;
+        if (this._focusFloat(strip, delta))
             return;
         const tile = this._focused();
         let idx = tile?.column ? strip.columns.indexOf(tile.column) + delta : 0;
@@ -5634,6 +5851,330 @@ export class Tiling {
             this.focusMonitor(next);
         }
         return true;
+    }
+
+    /**
+     * focus-left and focus-right to and from the windows of a strip's
+     * monitor that are on no strip. Such a window is in the order of the
+     * columns at the place its middle has on the screen. At the same
+     * middle as a column it comes after the column, so a window that
+     * floats over the middle of a lone column is one press to the right
+     * of it, and the column one press to the left of the window.
+     *
+     * The place of a column on the screen changes when the view scrolls,
+     * so the order is the one the screen shows at each press.
+     *
+     * Returns false when the key moves the focus as it does on a strip
+     * with columns only.
+     */
+    _focusFloat(strip, delta) {
+        // Over a fullscreen window the keys bring windows in and out.
+        if (strip.cover)
+            return false;
+        const own = this._floatingFocus();
+        const from = own?.get_monitor() === strip.monitor ? own : null;
+        const floats = this._floatsOn(strip).filter(w => w !== from);
+        if (!from && floats.length === 0)
+            return false;
+        const entry = win => {
+            const r = this._floatRect(win);
+            return {mid: Math.round(r.x + r.width / 2), layer: 1, seq: win.get_stable_sequence(), win};
+        };
+        const columnEntry = (col, i) => {
+            const t = (col.active ?? col.tiles[0])?.target;
+            return t ? {mid: Math.round(t.x + t.width / 2), layer: 0, seq: i, col} : null;
+        };
+        // Whether a is further along the way the key goes than b.
+        const past = (a, b) => {
+            const d = a.mid - b.mid || a.layer - b.layer || a.seq - b.seq;
+            return delta > 0 ? d > 0 : d < 0;
+        };
+        const nearest = list => list.reduce((best, e) => !best || past(best, e) ? e : best, null);
+        const go = e => {
+            if (e.col)
+                this._activate(e.col.active ?? e.col.tiles[0]);
+            else
+                e.win.activate(global.get_current_time());
+        };
+        if (from) {
+            const here = entry(from);
+            const columns = strip.columns.map(columnEntry).filter(e => e);
+            const next = nearest([...columns, ...floats.map(entry)].filter(e => past(e, here)));
+            if (next) {
+                go(next);
+            } else {
+                this._focusNeighbour(strip.monitor,
+                    delta < 0 ? Meta.DisplayDirection.LEFT : Meta.DisplayDirection.RIGHT);
+            }
+            return true;
+        }
+        const tile = this._focused();
+        if (!tile) {
+            // A monitor with no column, and the focus on no window of it.
+            if (strip.columns.length > 0)
+                return false;
+            const all = floats.map(entry);
+            go(all.reduce((best, e) => past(best, e) ? e : best));
+            return true;
+        }
+        if (tile.strip !== strip || !tile.column)
+            return false;
+        const at = strip.columns.indexOf(tile.column);
+        const here = columnEntry(tile.column, at);
+        if (!here)
+            return false;
+        // Between this column and the one the key goes to.
+        const to = strip.columns[at + delta];
+        const bound = to ? columnEntry(to, at + delta) : null;
+        const next = nearest(floats.map(entry)
+            .filter(e => past(e, here) && (!bound || past(bound, e))));
+        if (!next)
+            return false;
+        go(next);
+        return true;
+    }
+
+    /** The windows a strip's monitor shows that are on no strip and have an icon in the sidebar. */
+    _floatsOn(strip) {
+        const ws = strip.workspace ?? global.workspace_manager.get_active_workspace();
+        return ws.list_windows().filter(w => !this.tiles.has(w) && this._listed(w) &&
+            !w.minimized && w.get_monitor() === strip.monitor);
+    }
+
+    /**
+     * The window in focus, when it is one the keys move and size as a
+     * window on no strip. Not a dialog that is attached to its window:
+     * Mutter keeps that in the middle of the window.
+     */
+    _floatingFocus() {
+        const win = global.display.focus_window;
+        if (!win || this.tiles.has(win) || win.is_override_redirect() || isHelper(win) ||
+            win.minimized || win.is_fullscreen() || win.is_attached_dialog())
+            return null;
+        const type = win.get_window_type();
+        if (type !== Meta.WindowType.NORMAL && type !== Meta.WindowType.DIALOG &&
+            type !== Meta.WindowType.MODAL_DIALOG && type !== Meta.WindowType.UTILITY)
+            return null;
+        return win;
+    }
+
+    /**
+     * Where a window on no strip can go on its monitor: the work area less
+     * one gap on each side, which is the place of a column as wide as the
+     * view. {x, y, width, height}, and strip: the strip the monitor shows.
+     */
+    _floatBounds(win) {
+        const strip = this._stripOn(win.get_monitor());
+        const area = strip.area;
+        const gap = strip.gap;
+        return {
+            strip,
+            x: area.x + gap, y: area.y + gap,
+            width: Math.max(1, area.width - 2 * gap),
+            height: Math.max(1, area.height - 2 * gap),
+        };
+    }
+
+    /**
+     * The place a window on no strip has, or is on its way to: the part
+     * that is drawn. A maximized window counts as one that fills the view,
+     * so a key takes it from there to a place inside the view.
+     */
+    _floatRect(win) {
+        const r = isMaximized(win) ? this._floatBounds(win)
+            : this.floaters.get(win)?.rect ?? visibleRect(this.config, win);
+        return {x: r.x, y: r.y, width: r.width, height: r.height};
+    }
+
+    /**
+     * Whether a key can size a window on no strip. A maximized window
+     * allows no resize, and leaves that state for the size (_floatTo).
+     */
+    _floatSizes(win) {
+        return win.allows_resize() || isMaximized(win);
+    }
+
+    /**
+     * Send a window on no strip to a place, {x, y, width, height} of the
+     * part that is drawn. A window that allows no resize keeps its size.
+     * Returns whether the place is another than the one it has.
+     */
+    _floatTo(win, rect) {
+        if (!win.allows_move())
+            return false;
+        const cur = this._floatRect(win);
+        const sized = this._floatSizes(win);
+        const to = {
+            x: Math.round(rect.x), y: Math.round(rect.y),
+            width: sized ? Math.round(rect.width) : cur.width,
+            height: sized ? Math.round(rect.height) : cur.height,
+        };
+        if (rectKey(to) === rectKey(cur))
+            return false;
+        // A maximized window takes no other frame. The shell animates the
+        // change of size from here, see Floater.sync.
+        if (isMaximized(win))
+            this._unmaximize(win);
+        if (!this.animator.enabled || !win.get_compositor_private()) {
+            this.floaters.get(win)?.stop();
+            const q = frameFor(this.config, win, to);
+            win.move_resize_frame(true, q.x, q.y, q.width, q.height);
+            return true;
+        }
+        let floater = this.floaters.get(win);
+        if (!floater) {
+            floater = new Floater(this, win);
+            this.floaters.set(win, floater);
+        }
+        floater.moveTo(to);
+        return true;
+    }
+
+    /**
+     * Give a window on no strip a size. A side that is at an edge of the
+     * view stays there, as a column at the left or the right edge of the
+     * view does when its width changes. Anywhere else the window keeps its
+     * middle, as far as the edges of the view allow: one stops a side
+     * that would grow past it, and a side that is past it already stays
+     * where it is.
+     */
+    _floatSize(win, width, height) {
+        const r = this._floatRect(win);
+        const b = this._floatBounds(win);
+        const along = (at, size, to, lo, span) => {
+            if (to === size)
+                return at;
+            const near = Math.abs(at - lo) <= 1;
+            const far = Math.abs(at + size - lo - span) <= 1;
+            if (near !== far)
+                return near ? lo : lo + span - to;
+            const first = Math.min(lo, at);
+            const last = Math.max(lo + span, at + size);
+            return clamp(Math.round(at + (size - to) / 2), first, Math.max(first, last - to));
+        };
+        this._floatTo(win, {
+            x: along(r.x, r.width, width, b.x, b.width),
+            y: along(r.y, r.height, height, b.y, b.height),
+            width, height,
+        });
+    }
+
+    /** The width a share of the view gives a window on no strip: that of a column. */
+    _floatWidth(win, proportion) {
+        const b = this._floatBounds(win);
+        const area = b.strip.area;
+        const gap = b.strip.gap;
+        return clamp(Math.round((area.width - gap) * proportion - gap),
+            Math.min(b.width, Math.max(MIN_COLUMN_WIDTH, minSize(win)[0])), b.width);
+    }
+
+    /** cycle-width for a window on no strip: the next of layout.presetWidths, as a column takes them. */
+    _cycleFloatWidth(win) {
+        const presets = this.config.values.layout.presetWidths;
+        if (!presets.length || !this._floatSizes(win))
+            return;
+        const r = this._floatRect(win);
+        const cur = this._floatBounds(win).strip.proportionFor(r.width);
+        const ordered = [
+            ...presets.filter(p => p > cur + 0.01),
+            ...presets.filter(p => p <= cur + 0.01),
+        ];
+        const next = ordered.find(p => Math.abs(this._floatWidth(win, p) - r.width) > 1);
+        if (next !== undefined)
+            this._floatSize(win, this._floatWidth(win, next), r.height);
+    }
+
+    /**
+     * maximize-column for a window on no strip: it fills the place of a
+     * column as wide as the view, and the next press gives it the place it
+     * had before. A window that fills the view with no such place, sized
+     * by hand, gets the size of a window that has just left its strip.
+     */
+    _toggleFloatFill(win) {
+        // Maximized: back to the place Mutter kept for it.
+        if (isMaximized(win)) {
+            this._unmaximize(win);
+            return;
+        }
+        if (!win.allows_resize())
+            return;
+        const b = this._floatBounds(win);
+        const r = this._floatRect(win);
+        const fills = rect => b.width - rect.width <= FULL_SLACK * b.width &&
+            b.height - rect.height <= FULL_SLACK * b.height;
+        if (!fills(r)) {
+            this._floatRestore.set(win, r);
+            this._floatTo(win, {x: b.x, y: b.y, width: b.width, height: b.height});
+            return;
+        }
+        const saved = this._floatRestore.get(win);
+        this._floatRestore.delete(win);
+        const area = b.strip.area;
+        const size = saved && !fills(saved)
+            ? saved : {width: area.width * 0.55, height: area.height * 0.7};
+        // The place from before, when it is on the monitor the window is
+        // on now. Else the middle of this one.
+        const there = size === saved &&
+            saved.x + saved.width / 2 >= area.x && saved.x + saved.width / 2 < area.x + area.width &&
+            saved.y + saved.height / 2 >= area.y && saved.y + saved.height / 2 < area.y + area.height;
+        this._floatTo(win, there ? saved : {
+            x: area.x + (area.width - size.width) / 2,
+            y: area.y + (area.height - size.height) / 2,
+            width: size.width, height: size.height,
+        });
+    }
+
+    /**
+     * align-left, align-right and align-center for a window on no strip:
+     * to that side of the view at the height it has, or to the middle of
+     * the monitor, where a new window that floats opens (_centre). A
+     * window that fits in the view stays inside it there.
+     */
+    _alignFloat(win, anchor) {
+        const b = this._floatBounds(win);
+        const r = this._floatRect(win);
+        if (anchor === 'left') {
+            r.x = b.x;
+        } else if (anchor === 'right') {
+            r.x = b.x + b.width - r.width;
+        } else {
+            const m = global.display.get_monitor_geometry(win.get_monitor());
+            const inside = (at, size, lo, span) =>
+                size <= span ? clamp(at, lo, lo + span - size) : at;
+            r.x = inside(m.x + Math.round((m.width - r.width) / 2), r.width, b.x, b.width);
+            r.y = inside(m.y + Math.round((m.height - r.height) / 2), r.height, b.y, b.height);
+        }
+        this._floatTo(win, r);
+    }
+
+    /**
+     * A move key for a window on no strip: one step that way, FLOAT_STEP
+     * of the width of the work area, and no further than the edge of the
+     * view. dx, dy: -1, 0 or 1. Returns false for a window that is at
+     * that edge, or past it: the key then takes it to the next monitor or
+     * workspace, as it takes a column at the end of its strip.
+     */
+    _stepFloat(win, dx, dy) {
+        if (!win.allows_move())
+            return false;
+        const b = this._floatBounds(win);
+        const r = this._floatRect(win);
+        const step = Math.max(1, Math.round(b.strip.area.width * FLOAT_STEP));
+        const along = (at, size, lo, span, dir) => {
+            if (dir < 0)
+                return at > lo ? Math.max(lo, at - step) : null;
+            const last = lo + span - size;
+            return at < last ? Math.min(last, at + step) : null;
+        };
+        const to = dx !== 0
+            ? along(r.x, r.width, b.x, b.width, dx) : along(r.y, r.height, b.y, b.height, dy);
+        if (to === null)
+            return false;
+        if (dx !== 0)
+            r.x = to;
+        else
+            r.y = to;
+        return this._floatTo(win, r);
     }
 
     focusEdge(last) {
@@ -5781,13 +6322,16 @@ export class Tiling {
     /**
      * Left and right along the strip. Past its first or last column the
      * column goes to the monitor on that side, as the focus does with
-     * focusColumn(). So does a floating window.
+     * focusColumn(). A window on no strip moves that way on its monitor
+     * (_stepFloat), and from the edge of it to the monitor on that side.
      */
     moveColumn(delta) {
         const side = delta < 0 ? Meta.DisplayDirection.LEFT : Meta.DisplayDirection.RIGHT;
         const tile = this.focusTile;
         if (!tile) {
-            this._moveFloating(side);
+            const win = this._floatingFocus();
+            if (!win || !this._stepFloat(win, delta, 0))
+                this._moveFloating(side);
             return;
         }
         const strip = tile.strip;
@@ -5804,8 +6348,12 @@ export class Tiling {
 
     moveColumnToEdge(last) {
         const tile = this.focusTile;
-        if (!tile)
+        if (!tile) {
+            const win = this._floatingFocus();
+            if (win)
+                this._alignFloat(win, last ? 'right' : 'left');
             return;
+        }
         const strip = tile.strip;
         strip.columns.splice(strip.columns.indexOf(tile.column), 1);
         if (last)
@@ -5818,7 +6366,9 @@ export class Tiling {
     /**
      * Up/down inside the column, then to the next workspace. The window
      * goes to a monitor above or below where there is no workspace to go
-     * to, as the focus does with focusRow().
+     * to, as the focus does with focusRow(). A window on no strip moves up
+     * or down on its monitor first (_stepFloat), and goes on from the
+     * edge of it.
      */
     moveRow(delta) {
         const tile = this.focusTile;
@@ -5834,6 +6384,9 @@ export class Tiling {
             }
         }
         const win = global.display.focus_window;
+        const float = tile ? null : this._floatingFocus();
+        if (float && this._stepFloat(float, 0, delta))
+            return;
         const strip = tile?.strip ?? (win ? this._stripOn(win.get_monitor()) : null);
         const side = delta < 0 ? Meta.DisplayDirection.UP : Meta.DisplayDirection.DOWN;
         const wm = global.workspace_manager;
@@ -5904,18 +6457,35 @@ export class Tiling {
     }
 
     /**
-     * Move the focused window, when it is not tiled, to the monitor next to
-     * its own in a direction. Returns false when nothing was moved.
+     * Move the focused window, when it is on no strip, to the monitor next
+     * to its own in a direction. It arrives at the near edge of that
+     * monitor's view, so the opposite key brings it back. Returns false
+     * when nothing was moved.
      */
     _moveFloating(direction) {
-        const win = global.display.focus_window;
-        if (!win || this.tiles.has(win) || !this._listed(win) || !win.allows_move())
+        const win = this._floatingFocus();
+        if (!win?.allows_move())
             return false;
         const next = global.display.get_monitor_neighbor_index(win.get_monitor(), direction);
         if (next < 0)
             return false;
+        this.floaters.get(win)?.stop();
         win.move_to_monitor(next);
         this.setActiveMonitor(next);
+        if (win.get_monitor() !== next)
+            return true;
+        const b = this._floatBounds(win);
+        const r = visibleRect(this.config, win);
+        if (direction === Meta.DisplayDirection.LEFT)
+            r.x = b.x + b.width - r.width;
+        else if (direction === Meta.DisplayDirection.RIGHT)
+            r.x = b.x;
+        else if (direction === Meta.DisplayDirection.UP)
+            r.y = b.y + b.height - r.height;
+        else
+            r.y = b.y;
+        const q = frameFor(this.config, win, r);
+        win.move_frame(true, q.x, q.y);
         return true;
     }
 
@@ -5955,12 +6525,17 @@ export class Tiling {
     /**
      * cycle-width: the next of layout.presetWidths. A fullscreen window
      * leaves fullscreen for the first of them, as a column as wide as the
-     * view does.
+     * view does. A window on no strip takes the same widths where it is
+     * (_cycleFloatWidth).
      */
     cycleWidth() {
         const tile = this.focusTile;
-        if (!tile)
+        if (!tile) {
+            const win = this._floatingFocus();
+            if (win)
+                this._cycleFloatWidth(win);
             return;
+        }
         const presets = this.config.values.layout.presetWidths;
         if (!presets.length)
             return;
@@ -6067,8 +6642,17 @@ export class Tiling {
 
     adjustWidth(delta) {
         const tile = this.focusTile;
-        if (!tile)
+        if (!tile) {
+            // A window on no strip: by the same share of the view, around
+            // its middle.
+            const win = this._floatingFocus();
+            if (win && this._floatSizes(win)) {
+                const r = this._floatRect(win);
+                const p = this._floatBounds(win).strip.proportionFor(r.width) + delta;
+                this._floatSize(win, this._floatWidth(win, p), r.height);
+            }
             return;
+        }
         const col = tile.column;
         const strip = tile.strip;
         // Start from the width the column has, which is more than its
@@ -6145,7 +6729,20 @@ export class Tiling {
 
     adjustHeight(delta) {
         const tile = this.focusTile;
-        if (!tile || tile.column.tiles.length < 2)
+        if (!tile) {
+            // A window on no strip: by the same share of its height,
+            // around its middle.
+            const win = this._floatingFocus();
+            if (win && this._floatSizes(win)) {
+                const r = this._floatRect(win);
+                const b = this._floatBounds(win);
+                const least = Math.min(b.height, Math.max(FLOAT_MIN_HEIGHT, minSize(win)[1]));
+                this._floatSize(win, r.width,
+                    clamp(Math.round(r.height * (1 + delta)), least, b.height));
+            }
+            return;
+        }
+        if (tile.column.tiles.length < 2)
             return;
         tile.weight = clamp(tile.weight * (1 + delta), 0.25, 4);
         tile.strip.layout(true);
@@ -6214,12 +6811,17 @@ export class Tiling {
 
     /**
      * maximize-column, see _toggleMaximizeColumn(). A fullscreen window
-     * leaves fullscreen for a column as wide as the view.
+     * leaves fullscreen for a column as wide as the view. A window on no
+     * strip fills the view, see _toggleFloatFill().
      */
     maximizeColumn() {
         const tile = this.focusTile;
-        if (!tile)
+        if (!tile) {
+            const win = this._floatingFocus();
+            if (win)
+                this._toggleFloatFill(win);
             return;
+        }
         if (!this._leaveFullscreen(tile)) {
             this._toggleMaximizeColumn(tile);
             return;
@@ -6246,12 +6848,17 @@ export class Tiling {
     /**
      * Slide the column in focus to a place on the screen: 'left', 'right'
      * or 'middle'. The view scrolls, the order of the columns and the
-     * focus stay. Not past an end of the strip, see Strip.keepAnchor.
+     * focus stay. Not past an end of the strip, see Strip.keepAnchor. A
+     * window on no strip goes to that place itself (_alignFloat).
      */
     alignColumn(anchor) {
         const tile = this.focusTile;
-        if (!tile)
+        if (!tile) {
+            const win = this._floatingFocus();
+            if (win)
+                this._alignFloat(win, anchor);
             return;
+        }
         tile.strip.place(tile.column, anchor);
         tile.strip.layout(true);
         this._changed();

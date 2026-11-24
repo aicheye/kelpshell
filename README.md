@@ -52,7 +52,7 @@ Each workspace is a horizontal strip of columns, in the style of [niri](https://
 - A column holds one window or several stacked vertically.
 - `Super+R` cycles the column width through 1/3, 1/2 and 2/3 of the screen. `Super+F` toggles full width. The width set for an app is remembered.
 - Drag a window onto another to stack them, or between two columns to put it there. A cue shows where it lands.
-- Dialogs, fixed-size windows and windows set always on top float. `Super+T` floats or tiles any window.
+- Dialogs, fixed-size windows and windows set always on top float. `Super+T` floats or tiles any window. The focus, move, align and width keys work on a floating window too.
 - Workspaces are stacked vertically and slide with their wallpaper.
 - A second monitor shows all of its windows side by side. The focus and move keys cross from one monitor to the next.
 
