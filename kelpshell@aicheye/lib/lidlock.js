@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // A lock when the lid closes.
 //
 // Stock GNOME locks at a lid close only through the suspend: logind

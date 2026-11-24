@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The surface material: the wallpaper, blurred and tinted, drawn inside each
 // card at the card's own screen position. Cards then look like frosted glass
 // over the wallpaper. The image has the opacity theme.opacity in every pixel,
@@ -575,6 +577,9 @@ export class Backdrop {
         }
         for (const size of missing) {
             try {
+                // One at a time: a newer refresh ends this one between two
+                // pictures.
+                // eslint-disable-next-line no-await-in-loop
                 const pixbuf = await this._loadWallpaper(size.w, size.h);
                 if (serial === this._serial)
                     size.path = this._render(pixbuf, size.w, size.h, size.cached);

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Cards that blur the windows under them (theme.liveBlur).
 //
 // The material of lib/backdrop.js is a picture of the wallpaper. Over a

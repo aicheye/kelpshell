@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Column widths per app, kept on disk.
 //
 // When a column's width is set by hand (cycle-width, width-increase and

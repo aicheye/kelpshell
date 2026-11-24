@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The shortcut sheet: the keys Kelpshell binds, drawn as key caps in groups.
 //
 // The keys are read from the config each time the sheet opens, so it shows
@@ -20,54 +22,68 @@ const VERTICAL = Clutter.Orientation.VERTICAL;
 // 'keys' is a fixed accelerator for a key the config does not set.
 const COLUMNS = [
     [
-        {title: 'Focus', rows: [
-            {label: 'Column left, right', actions: ['focus-left', 'focus-right']},
-            {label: 'Window up, down', actions: ['focus-up', 'focus-down']},
-            {label: 'First, last column', actions: ['focus-first', 'focus-last']},
-            {label: 'Switch windows', keys: ['<Alt>Tab']},
-        ]},
-        {title: 'Move', rows: [
-            {label: 'Column left, right', actions: ['move-left', 'move-right']},
-            {label: 'Window up, down', actions: ['move-up', 'move-down']},
-            {label: 'To first, last', actions: ['move-first', 'move-last']},
-            {label: 'Into or out of a stack',
-                actions: ['consume-or-expel-left', 'consume-or-expel-right']},
-            {label: 'To the left, right side', actions: ['align-left', 'align-right']},
-            {label: 'To the middle', actions: ['align-center']},
-        ]},
+        {
+            title: 'Focus', rows: [
+                {label: 'Column left, right', actions: ['focus-left', 'focus-right']},
+                {label: 'Window up, down', actions: ['focus-up', 'focus-down']},
+                {label: 'First, last column', actions: ['focus-first', 'focus-last']},
+                {label: 'Switch windows', keys: ['<Alt>Tab']},
+            ],
+        },
+        {
+            title: 'Move', rows: [
+                {label: 'Column left, right', actions: ['move-left', 'move-right']},
+                {label: 'Window up, down', actions: ['move-up', 'move-down']},
+                {label: 'To first, last', actions: ['move-first', 'move-last']},
+                {
+                    label: 'Into or out of a stack',
+                    actions: ['consume-or-expel-left', 'consume-or-expel-right'],
+                },
+                {label: 'To the left, right side', actions: ['align-left', 'align-right']},
+                {label: 'To the middle', actions: ['align-center']},
+            ],
+        },
     ],
     [
-        {title: 'Size', rows: [
-            {label: 'Cycle width', actions: ['cycle-width']},
-            {label: 'Narrower, wider', actions: ['width-decrease', 'width-increase']},
-            {label: 'Shorter, taller', actions: ['height-decrease', 'height-increase']},
-            {label: 'Full width', actions: ['maximize-column']},
-            {label: 'Fullscreen', actions: ['fullscreen']},
-            {label: 'Centre', actions: ['center-column']},
-        ]},
-        {title: 'Window', rows: [
-            {label: 'Float or tile', actions: ['toggle-float']},
-            {label: 'Minimize', actions: ['minimize-window']},
-            {label: 'Close', actions: ['close-window']},
-            {label: 'Reopen closed', actions: ['reopen-closed']},
-        ]},
+        {
+            title: 'Size', rows: [
+                {label: 'Cycle width', actions: ['cycle-width']},
+                {label: 'Narrower, wider', actions: ['width-decrease', 'width-increase']},
+                {label: 'Shorter, taller', actions: ['height-decrease', 'height-increase']},
+                {label: 'Full width', actions: ['maximize-column']},
+                {label: 'Fullscreen', actions: ['fullscreen']},
+                {label: 'Centre', actions: ['center-column']},
+            ],
+        },
+        {
+            title: 'Window', rows: [
+                {label: 'Float or tile', actions: ['toggle-float']},
+                {label: 'Minimize', actions: ['minimize-window']},
+                {label: 'Close', actions: ['close-window']},
+                {label: 'Reopen closed', actions: ['reopen-closed']},
+            ],
+        },
     ],
     [
-        {title: 'Workspaces', rows: [
-            {label: 'Previous, next', actions: ['workspace-up', 'workspace-down']},
-            {label: 'Go to', range: ['workspace-1', 'workspace-9']},
-            {label: 'Send window', actions: ['move-to-workspace-up', 'move-to-workspace-down']},
-            {label: 'Send window to', range: ['move-to-workspace-1', 'move-to-workspace-9']},
-        ]},
-        {title: 'Shell', rows: [
-            {label: 'Launcher', actions: ['launcher']},
-            {label: 'Clipboard', actions: ['clipboard']},
-            {label: 'Emoji and symbols', actions: ['emoji']},
-            {label: 'Terminal', actions: ['terminal']},
-            {label: 'Files', actions: ['files']},
-            {label: 'Sidebar', actions: ['toggle-sidebar']},
-            {label: 'Shortcuts', actions: ['shortcuts']},
-        ]},
+        {
+            title: 'Workspaces', rows: [
+                {label: 'Previous, next', actions: ['workspace-up', 'workspace-down']},
+                {label: 'Go to', range: ['workspace-1', 'workspace-9']},
+                {label: 'Send window', actions: ['move-to-workspace-up', 'move-to-workspace-down']},
+                {label: 'Send window to', range: ['move-to-workspace-1', 'move-to-workspace-9']},
+            ],
+        },
+        {
+            title: 'Shell', rows: [
+                {label: 'Launcher', actions: ['launcher']},
+                {label: 'Clipboard', actions: ['clipboard']},
+                {label: 'Emoji and symbols', actions: ['emoji']},
+                {label: 'Terminal', actions: ['terminal']},
+                {label: 'Files', actions: ['files']},
+                {label: 'Sidebar', actions: ['toggle-sidebar']},
+                {label: 'Shortcuts', actions: ['shortcuts']},
+            ],
+        },
     ],
 ];
 

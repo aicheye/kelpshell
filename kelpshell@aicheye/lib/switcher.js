@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The window switcher (Alt+Tab, Super+Tab): one card with a live thumbnail
 // of every window, most recently used first. Each item shows the app icon,
 // the window title, the app name and the workspace the window is on. It replaces the shell's app
@@ -282,21 +284,21 @@ class KelpWindowSwitcher extends SwitcherPopup.SwitcherPopup {
     _keyPressHandler(keysym, action) {
         const A = Meta.KeyBindingAction;
         if (action === A.SWITCH_APPLICATIONS || action === A.SWITCH_WINDOWS ||
-            action === A.SWITCH_GROUP) {
+            action === A.SWITCH_GROUP)
             this._select(this._next());
-        } else if (action === A.SWITCH_APPLICATIONS_BACKWARD ||
-            action === A.SWITCH_WINDOWS_BACKWARD || action === A.SWITCH_GROUP_BACKWARD) {
+        else if (action === A.SWITCH_APPLICATIONS_BACKWARD ||
+            action === A.SWITCH_WINDOWS_BACKWARD || action === A.SWITCH_GROUP_BACKWARD)
             this._select(this._previous());
-        } else if (keysym === Clutter.KEY_Right || keysym === Clutter.KEY_Down) {
+        else if (keysym === Clutter.KEY_Right || keysym === Clutter.KEY_Down)
             this._select(this._next());
-        } else if (keysym === Clutter.KEY_Left || keysym === Clutter.KEY_Up) {
+        else if (keysym === Clutter.KEY_Left || keysym === Clutter.KEY_Up)
             this._select(this._previous());
-        } else if (keysym === Clutter.KEY_w || keysym === Clutter.KEY_W ||
-            keysym === Clutter.KEY_F4) {
+        else if (keysym === Clutter.KEY_w || keysym === Clutter.KEY_W ||
+            keysym === Clutter.KEY_F4)
             this._items[this._selectedIndex]?.delete(global.get_current_time());
-        } else {
+        else
             return Clutter.EVENT_PROPAGATE;
-        }
+
         return Clutter.EVENT_STOP;
     }
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Server-side decorations for the windows named in windows.crop.
 //
 // A Wayland client asks the compositor for a title bar with the
@@ -77,7 +79,7 @@ export class Decorations {
             .filter(name => name && !name.includes('\n'));
         try {
             GLib.file_set_contents(
-                GLib.build_filenamev([this._dir, 'decorate']), names.join('\n') + '\n');
+                GLib.build_filenamev([this._dir, 'decorate']), `${names.join('\n')}\n`);
         } catch (e) {
             console.warn(`kelpshell: cannot write the decoration rules: ${e.message}`);
         }

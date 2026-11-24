@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Touchpad scrolling that is the same in every window: as far for the same
 // movement of the fingers, and going on as long after them, as in Firefox.
 //
@@ -326,7 +328,7 @@ export class Scroll {
 
     // ---- the fingers ----
 
-    _onScroll(native, actor, timeUs, dx, dy, finish, source, x, y, modifiers) {
+    _onScroll(native, actor, timeUs, dx, dy, finish, source, _x, _y, _modifiers) {
         const values = this._config.values.scroll;
         const speed = Number(values.speed) > 0 ? Number(values.speed) : 1;
         const sx = speed / this._factor[0];

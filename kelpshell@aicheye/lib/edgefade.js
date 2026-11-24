@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Windows that scroll off the left of the view pass under the sidebar and
 // fade into the wallpaper, where they used to stop at a hard vertical line
 // next to the cards.

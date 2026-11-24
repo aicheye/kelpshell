@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Dragging a file out of the shell and dropping it on a window.
 //
 // The shell's own drag code (ui/dnd.js) moves a picture of the file with

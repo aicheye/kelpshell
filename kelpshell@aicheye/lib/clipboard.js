@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The clipboard history: a list of what was copied lately, opened with
 // Super+V. Enter puts the chosen entry on the clipboard and pastes it into
 // the window that has the focus.
@@ -869,7 +871,11 @@ export class Clipboard {
             this._fill();
         // Another page, the first entry, the last one removed, or the first
         // letter of a search: other keys.
-        const set = grid ? 'grid' : empty ? 'empty' : 'list';
+        let set = 'list';
+        if (grid)
+            set = 'grid';
+        else if (empty)
+            set = 'empty';
         const backSpace = [...this._keys.values()].some(k => k.accel === 'BackSpace');
         if (this.isOpen && this._keys.size > 0 &&
             (set !== this._keySet || (grid && backSpace !== (this._query !== '')))) {

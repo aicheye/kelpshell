@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The downloads pile of the sidebar: the newest files of the downloads
 // folder lying on each other, the newest on top. It has no card around it.
 //
@@ -415,7 +417,7 @@ class KelpPile extends St.Widget {
         if (this._spread) {
             const hovered = button === this._hovered;
             const scale = hovered ? 1 : l.spread / l.icon;
-            const side = k => (k % 2 ? 1 : -1);
+            const side = k => k % 2 ? 1 : -1;
             let x, y, angle;
             if (folder) {
                 // A little to the side the last file is not on. In one
@@ -768,7 +770,7 @@ class Popup {
         for (const item of this._card.items) {
             const icon = iconOf(item, TILE_ICON, 'kelp-download-icon');
             const tile = add(icon, item.info.get_display_name(),
-                reveal => (reveal ? this._card.reveal(item.file) : this._card.open(item.file)));
+                reveal => reveal ? this._card.reveal(item.file) : this._card.open(item.file));
             // The grid covers the monitor and would be what the file is
             // dragged over, so it closes when a drag starts.
             //
@@ -1234,9 +1236,9 @@ export class DownloadsCard {
         // The picture can be narrower than its place. A framed picture
         // knows its width. A themed icon has about 4px of nothing on each
         // side at this size.
-        const picture = button.child?.child?.width;
+        const drawn = button.child?.child?.width;
         const inset = Math.max(0, Math.min(file.width / 2,
-            picture > 0 ? (file.width - picture) / 2 : 4 * s));
+            drawn > 0 ? (file.width - drawn) / 2 : 4 * s));
         this._tip.show(name, {
             x: file.x + inset, y: file.y, width: file.width - 2 * inset, height: file.height,
         });
@@ -1278,7 +1280,7 @@ export class DownloadsCard {
             null, Gio.DBusCallFlags.NONE, -1, null, (bus, result) => {
                 try {
                     bus.call_finish(result);
-                } catch (e) {
+                } catch {
                     // No file manager answers: open the folder.
                     this.open(file.get_parent() ?? this.dir);
                 }

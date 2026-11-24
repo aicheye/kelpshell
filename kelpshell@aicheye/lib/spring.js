@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Springs and the frame ticker that drives them.
 //
 // A spring keeps its velocity when its target changes, so retargeting in the

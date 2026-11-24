@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // One-line labels that keep their height.
 
 import Pango from 'gi://Pango';

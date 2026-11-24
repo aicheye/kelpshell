@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Emoji, emoticons and symbols for the picker (lib/clipboard.js): what there
 // is to choose from, which of them were used last, and the grid that shows
 // them.
@@ -126,7 +128,11 @@ function fit(typed, word) {
         return IN_A_ROW;
     if (word[0] !== typed[0])
         return 0;
-    const most = n >= 8 ? 2 : n >= 4 ? 1 : 0;
+    let most = 0;
+    if (n >= 8)
+        most = 2;
+    else if (n >= 4)
+        most = 1;
     if (most > 0) {
         const [whole, start] = slips(typed, word, most);
         if (whole <= most)
@@ -323,7 +329,12 @@ export class Glyphs {
                     const f = fit(typed, word);
                     if (f === 0)
                         return;
-                    const sum = f + (i === 0 ? 20 : i < e.named ? 10 : 0);
+                    let bonus = 0;
+                    if (i === 0)
+                        bonus = 20;
+                    else if (i < e.named)
+                        bonus = 10;
+                    const sum = f + bonus;
                     if (sum > best) {
                         best = sum;
                         bestFit = f;
@@ -334,8 +345,12 @@ export class Glyphs {
                     break;
                 score += best;
             }
-            if (worst > 0)
-                kinds[worst >= IN_A_ROW ? 0 : worst >= WHOLE ? 1 : 2].push({e, score});
+            if (worst >= IN_A_ROW)
+                kinds[0].push({e, score});
+            else if (worst >= WHOLE)
+                kinds[1].push({e, score});
+            else if (worst > 0)
+                kinds[2].push({e, score});
         }
         const [inARow, whole, other] = kinds;
         // The order of the file among equals.
@@ -449,7 +464,7 @@ export class GlyphGrid {
             }
             let row = null;
             let used = 0;
-            section.items.forEach((item, i) => {
+            for (const [i, item] of section.items.entries()) {
                 const span = this._span(item.text);
                 if (!row || used + span > this._columns) {
                     row = {first: this._items.length + i, count: 0, cells: [], y, height: this._cell};
@@ -460,7 +475,7 @@ export class GlyphGrid {
                 row.cells.push({at: used, span});
                 row.count++;
                 used += span;
-            });
+            }
             this._items.push(...section.items);
         }
         this._canvas.set_height(y);

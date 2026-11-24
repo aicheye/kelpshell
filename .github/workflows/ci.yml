@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck install.sh dev/*.sh
+
+  native:
+    name: Native modules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libglib2.0-dev
+      # Compiled, not linked: the modules call Mutter functions that only a
+      # running GNOME Shell provides.
+      - run: |
+          for source in native/*.c; do
+            gcc -c -fPIC -O2 -Wall -Wextra -Wno-unused-parameter -Werror \
+              $(pkg-config --cflags gio-2.0) -o /dev/null "$source"
+          done
+
+  stylesheet:
+    name: Light stylesheet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 dev/light-css.py
+      - run: test -s kelpshell@aicheye/stylesheet-light.css

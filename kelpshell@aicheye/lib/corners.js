@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // One corner radius for every window.
 //
 // Clients round their own corners, each with its own radius: 15 px in
@@ -453,10 +455,15 @@ export class Corners {
         // no line across the window where the bar ends.
         const bar = crop.bar > 0;
         const outlined = this._config.values.windows.outline || isCropped(crop);
+        let line = null;
+        if (bar)
+            line = BAR_LINE;
+        else if (outlined)
+            line = OUTLINE;
         effect.setShape(
             [x + crop.left, y + crop.top - (bar ? crop.bar : 0),
                 x + frame.width - crop.right, y + frame.height - crop.bottom],
-            radius, bar ? BAR_LINE : outlined ? OUTLINE : null, scale);
+            radius, line, scale);
     }
 
     _clear(win) {

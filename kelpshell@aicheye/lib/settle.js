@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Animations of something that has just been shown, started once the shell
 // has finished the work of showing it.
 //

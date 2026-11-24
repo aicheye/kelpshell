@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Text configuration: ~/.config/kelpshell/config.jsonc, merged over DEFAULTS.
 // The file is watched, so saving it applies the change without a restart.
 

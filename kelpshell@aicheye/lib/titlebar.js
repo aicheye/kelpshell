@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // A title bar for a window named in windows.crop.
 //
 // The client of such a window draws no title bar, or draws one that is cut

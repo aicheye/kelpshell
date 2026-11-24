@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Write kelpshell@aicheye/data/emoji.txt from the emoji table of GTK 4.
 
 The table is in the GTK library (/org/gtk/libgtk/emoji/en.data): every emoji

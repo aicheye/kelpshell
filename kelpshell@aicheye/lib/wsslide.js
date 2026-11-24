@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // What is behind the windows while the workspaces slide.
 //
 // In the shell every workspace slides with a wallpaper of its own, and the
@@ -193,7 +195,6 @@ function seam(axes, source, gap, radius) {
  * those copies for as long as the group lasts.
  */
 export function decorateSwitch(group, monitor, fade, glass = null) {
-
     // Under everything, and still: the source of every copy, and what shows
     // wherever nothing else is drawn.
     const source = new WorkspaceAnimation.WorkspaceBackground(
@@ -208,7 +209,7 @@ export function decorateSwitch(group, monitor, fade, glass = null) {
     const vertical = global.workspace_manager.layout_rows === -1;
     const axes = new Axes(monitor, vertical);
     const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-    const place = g => (vertical ? g.y : g.x);
+    const place = g => vertical ? g.y : g.x;
     const sorted = [...groups].sort((a, b) => place(a) - place(b));
     sorted.forEach((g, i) => {
         container.insert_child_at_index(new Clutter.Clone({

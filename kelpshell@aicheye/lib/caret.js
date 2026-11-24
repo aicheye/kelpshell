@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // A blinking text cursor for an St.Entry.
 //
 // St.Entry has no blinking cursor of its own in GNOME 51: the cursor of a

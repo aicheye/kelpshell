@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build the native modules for the installed GNOME Shell:
 #
 #   native/decorations.c   server-side decorations for chosen Wayland clients
@@ -24,7 +25,7 @@ mkdir -p "$OUT"
 # call of that function.
 for name in decorations drag scroll; do
     # shellcheck disable=SC2046
-    gcc -shared -fPIC -O2 -Wall -Wl,-z,now \
+    gcc -shared -fPIC -O2 -Wall -Wextra -Wno-unused-parameter -Wl,-z,now \
         $(pkg-config --cflags gio-2.0) \
         -o "$OUT/libkelp-$name.so" "$REPO/native/$name.c"
     echo "$OUT/libkelp-$name.so"

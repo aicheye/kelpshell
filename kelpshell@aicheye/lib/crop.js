@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Windows that draw a frame of their own which cannot be turned off.
 //
 // A Chromium window asks the compositor for a title bar. GNOME has none to

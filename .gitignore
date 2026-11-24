@@ -1,0 +1,9 @@
+# Built by install.sh
+/kelpshell@aicheye/native/
+/kelpshell@aicheye/stylesheet-light.css
+
+# Development tools
+/node_modules/
+
+# Packed extension
+*.shell-extension.zip

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // A small picture of an image file or of image data, with its proportions
 // kept: the files of the downloads pile and the images of the clipboard
 // list.
@@ -123,7 +125,7 @@ export function picture({
                 show(content);
                 loaded?.(actor);
             }
-        } catch (e) {
+        } catch {
             if (alive && !cancellable.is_cancelled())
                 fallback?.(actor);
         }

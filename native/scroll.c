@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Touchpad scroll events, handed to the extension before any window gets
 // them.
 //

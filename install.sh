@@ -1,7 +1,8 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Install or remove Kelpshell for the current user.
 #
-#   ./install.sh             link the extension and create a config file
+#   ./install.sh             build, link the extension and create a config file
 #   ./install.sh --uninstall remove the link (the config file is kept)
 #
 # The extension is linked, not copied, so edits in this repository apply the
@@ -30,6 +31,9 @@ if [[ -e "$TARGET" && ! -L "$TARGET" ]]; then
     exit 1
 fi
 
+# The light style is made from the dark one.
+"$REPO/dev/light-css.py"
+
 mkdir -p "$(dirname "$TARGET")" "$CONFIG_DIR"
 ln -sfn "$REPO/$UUID" "$TARGET"
 echo "Linked $TARGET -> $REPO/$UUID"
@@ -39,12 +43,11 @@ if [[ ! -e "$CONFIG_DIR/config.jsonc" ]]; then
     echo "Created $CONFIG_DIR/config.jsonc"
 fi
 
-# The native module is optional: without it Spotify's frame is cut off and
-# not left out. See "Replaced frames" in the README.
+# The native modules are optional, see "Native modules" in the README.
 if command -v gcc > /dev/null && pkg-config --exists gio-2.0 2> /dev/null; then
-    echo "Built $("$REPO/dev/build-native.sh")"
+    "$REPO/dev/build-native.sh" | sed 's/^/Built /'
 else
-    echo "Native module not built: gcc or the GLib headers are missing."
+    echo "Native modules not built: gcc or the GLib headers are missing."
 fi
 
 cat <<EOF

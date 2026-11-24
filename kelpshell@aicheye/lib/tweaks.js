@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Changes to the stock shell: hide the top bar, replace the overview with
 // the launcher, stack workspaces vertically, move notification banners, and
 // re-anchor the calendar and quick settings popups to the sidebar.
 // Everything here is undone in disable().
 
 import Clutter from 'gi://Clutter';
-import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -140,7 +141,6 @@ export class Tweaks {
         this._colorScheme = Main.sessionMode.colorScheme;
         Main.sessionMode.colorScheme = 'prefer-light';
         St.Settings.get().notify('color-scheme');
-
     }
 
     /**
@@ -153,10 +153,14 @@ export class Tweaks {
     _applySettings() {
         this._hotCorner = !!this._config.values.launcher.hotCorner;
         this._overrides.apply([
-            {schema: 'org.gnome.mutter', key: 'edge-tiling',
-                value: GLib.Variant.new_boolean(false)},
-            {schema: 'org.gnome.desktop.interface', key: 'enable-hot-corners',
-                value: GLib.Variant.new_boolean(this._hotCorner)},
+            {
+                schema: 'org.gnome.mutter', key: 'edge-tiling',
+                value: GLib.Variant.new_boolean(false),
+            },
+            {
+                schema: 'org.gnome.desktop.interface', key: 'enable-hot-corners',
+                value: GLib.Variant.new_boolean(this._hotCorner),
+            },
         ]);
     }
 
@@ -534,7 +538,6 @@ export class Tweaks {
         const tracker = Main.wm._workspaceAnimation?._swipeTracker;
         if (tracker)
             tracker.orientation = Clutter.Orientation.HORIZONTAL;
-
     }
 
     /**

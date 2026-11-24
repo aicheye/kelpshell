@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The popups, drawn once after a login, before the user opens them.
 //
 // The first time a popup is shown the shell does work it never does again:

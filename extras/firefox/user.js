@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Kelpshell theme for Firefox: Firefox only reads chrome/userChrome.css and
 // chrome/userContent.css from the profile when this preference is true.
 user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Write stylesheet-light.css from stylesheet-dark.css.
 
 stylesheet-dark.css holds the dark style and is the only file to edit. The shell

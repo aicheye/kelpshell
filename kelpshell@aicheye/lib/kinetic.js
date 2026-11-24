@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // A scroll view that goes on for a while after the fingers have left the
 // touchpad, as a list of a GTK app does.
 //

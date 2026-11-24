@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Scrolling window manager.
 //
 // Each workspace on each monitor is a strip: columns laid left to right, each
@@ -493,8 +495,15 @@ class Tile {
         const now = GLib.get_monotonic_time() / 1000;
         const [px, py] = global.get_pointer();
         const {edges, frame, min} = held;
-        const dx = edges.includes('E') ? px - held.px : edges.includes('W') ? held.px - px : 0;
-        const dy = edges.includes('S') ? py - held.py : edges.includes('N') ? held.py - py : 0;
+        // px the frame grows by on an axis: the far edge follows the
+        // pointer, the near edge goes against it.
+        const grown = (far, near, moved) => {
+            if (edges.includes(far))
+                return moved;
+            return edges.includes(near) ? -moved : 0;
+        };
+        const dx = grown('E', 'W', px - held.px);
+        const dy = grown('S', 'N', py - held.py);
         const raw = [
             Math.max(1, min[0], Math.round(frame.width + dx)),
             Math.max(1, min[1], Math.round(frame.height + dy)),
@@ -1526,8 +1535,8 @@ class Strip {
         // others share the view without it.
         const sharing = this.columns.filter(c => c === col || !c.pending);
         const shared = viewW - (sharing.length - 1) * gap;
-        const share = c => (c === col ? proportion : c.proportion);
-        const isPinned = c => (c === col ? pinned : c.pinned);
+        const share = c => c === col ? proportion : c.proportion;
+        const isPinned = c => c === col ? pinned : c.pinned;
         const sum = (cols, f) => cols.reduce((total, c) => total + f(c), 0);
         // On a view too narrow for all of them, each has its part of it.
         const leasts = new Map(sharing.map(c => [c, this._leastWidth(c, c !== col || learned)]));
@@ -1552,10 +1561,10 @@ class Strip {
         let rest = shared - sum(fixed, fixedWidth);
         let open = free;
         for (;;) {
-            const total = sum(open, share);
-            const short = open.filter(c => rest * share(c) / total < least(c));
+            const each = rest / sum(open, share);
+            const short = open.filter(c => each * share(c) < least(c));
             if (short.length === 0)
-                return Math.max(1, Math.floor(rest * proportion / total));
+                return Math.max(1, Math.floor(each * proportion));
             if (short.includes(col))
                 return least(col);
             rest -= sum(short, least);
@@ -1599,8 +1608,10 @@ class Strip {
         const near = (a, b) => Math.abs(a - b) <= 1;
         const left = near(col.x, scroll);
         const right = near(col.x + col.width, scroll + viewW);
+        if (left && right)
+            return null;
         if (left || right)
-            return left === right ? null : left ? 'left' : 'right';
+            return left ? 'left' : 'right';
         return near(col.x + col.width / 2, scroll + viewW / 2) ? 'middle' : null;
     }
 
@@ -1984,15 +1995,15 @@ class Strip {
         // Nearest snap point. Several columns can share one scroll position
         // (the right edge of one is the left edge of the next view). Then the
         // column further along in the direction of travel wins.
-        const closest = points => {
-            let best = null;
-            for (const p of points) {
+        const closest = candidates => {
+            let found = null;
+            for (const p of candidates) {
                 const dist = Math.abs(p.scroll - projected);
-                if (!best || dist < best.dist - 0.5 ||
-                    (dist <= best.dist + 0.5 && dir > 0))
-                    best = {...p, dist};
+                if (!found || dist < found.dist - 0.5 ||
+                    (dist <= found.dist + 0.5 && dir > 0))
+                    found = {...p, dist};
             }
-            return best;
+            return found;
         };
         let best = closest(points);
 
@@ -2251,9 +2262,11 @@ class Strip {
             kids.indexOf(tile.actor) < kids.indexOf(cover.actor);
         if (raised)
             group.set_child_above_sibling(tile.actor, cover.actor);
-        return {kind: 'in', dir, col: next, tile, scroll, final, start, raised,
+        return {
+            kind: 'in', dir, col: next, tile, scroll, final, start, raised,
             reach: Math.abs(final - start),
-            rest: this._coverRest(s, next, scroll, [tile])};
+            rest: this._coverRest(s, next, scroll, [tile]),
+        };
     }
 
     /**
@@ -2535,9 +2548,11 @@ class Strip {
         if (!flight)
             return null;
         const {plan} = flight;
-        const lead = plan.kind === 'in'
-            ? (plan.tile.dead ? null : {tile: plan.tile, from: plan.start})
-            : plan.items.find(i => !i.tile.dead);
+        let lead;
+        if (plan.kind === 'in')
+            lead = plan.tile.dead ? null : {tile: plan.tile, from: plan.start};
+        else
+            lead = plan.items.find(i => !i.tile.dead);
         if (!lead || lead.tile.strip !== this)
             return null;
         // The settle item is dropped without its done(), which would have
@@ -4787,9 +4802,11 @@ export class Tiling {
         const width = DROP_BAR_WIDTH * s;
         const mid = (prev.x + prev.width + next.x) / 2;
         const x = clamp(Math.round(mid - width / 2), area.x, area.x + area.width - width);
-        return {index, rect: {
-            x, y: area.y + gap, width, height: area.height - 2 * gap, bar: true,
-        }};
+        return {
+            index, rect: {
+                x, y: area.y + gap, width, height: area.height - 2 * gap, bar: true,
+            },
+        };
     }
 
     _onGrabEnd(win) {
@@ -5166,8 +5183,11 @@ export class Tiling {
         if (next < 0)
             return false;
         const strip = this._stripOn(next);
-        const col = direction === Meta.DisplayDirection.LEFT ? strip?.columns.at(-1)
-            : direction === Meta.DisplayDirection.RIGHT ? strip?.columns[0] : null;
+        let col = null;
+        if (direction === Meta.DisplayDirection.LEFT)
+            col = strip?.columns.at(-1);
+        else if (direction === Meta.DisplayDirection.RIGHT)
+            col = strip?.columns[0];
         if (col) {
             this.setActiveMonitor(next);
             this._activate(col.active ?? col.tiles[0]);
@@ -5296,13 +5316,13 @@ export class Tiling {
             const focused = strip.focus === tile;
             const proportion = tile.column.proportion;
             strip.remove(tile);
-            if (before && after && before.column === after.column) {
+            if (before && after && before.column === after.column)
                 strip.addToColumn(tile, after.column, after.column.tiles.indexOf(after));
-            } else if (after) {
+            else if (after)
                 strip.addColumn(tile, strip.columns.indexOf(after.column), proportion);
-            } else {
+            else
                 strip.addColumn(tile, strip.columns.indexOf(before.column) + 1, proportion);
-            }
+
             if (focused)
                 strip.focus = tile;
         } else if (!crossed) {

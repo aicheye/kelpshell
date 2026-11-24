@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The sidebar: a column of cards on the left edge of the primary monitor.
 // Clock, workspace minimap, media, notifications, downloads, and status
 // controls. Cards that have nothing to show (no player, no notifications, an
@@ -1308,6 +1310,12 @@ class Minimap {
             else
                 caption.remove_style_pseudo_class('hover');
         };
+        // A terminal changes its title many times a second. The text is
+        // set in place, so that does not rebuild the list.
+        const followTitle = win => win.connectObject('notify::title', () => {
+            if (shown === win)
+                caption.text = win.title ?? '';
+        }, caption);
         for (const win of wins) {
             const cell = this._buildCell(win, win === focus, active);
             slots.push({win, cell});
@@ -1315,12 +1323,7 @@ class Minimap {
             if (!caption)
                 continue;
             cell.connect('notify::hover', () => showTitle(cell.hover ? win : named, cell.hover));
-            // A terminal changes its title many times a second. The text is
-            // set in place, so that does not rebuild the list.
-            win.connectObject('notify::title', () => {
-                if (shown === win)
-                    caption.text = win.title ?? '';
-            }, caption);
+            followTitle(win);
         }
         if (caption)
             showTitle(named, false);
@@ -1463,7 +1466,11 @@ class Minimap {
 
     /** A square cell with the icon of the window's app. It can be dragged. */
     _buildCell(win, focused, active) {
-        const s = this._collapsed ? 22 : active ? 24 : 16;
+        let s = 16;
+        if (this._collapsed)
+            s = 22;
+        else if (active)
+            s = 24;
         const app = this._tracker.get_window_app(win);
         const icon = app
             ? app.create_icon_texture(s)
@@ -2021,7 +2028,7 @@ class MediaCard {
                 GLib.mkdir_with_parents(dir, 0o755);
                 file.replace_contents(bytes, null, false,
                     Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-            } catch (e) {
+            } catch {
                 if (!cancellable.is_cancelled())
                     this._showCoverIcon();
                 return;
@@ -2037,7 +2044,7 @@ class MediaCard {
     _deleteCoverFile() {
         try {
             this._coverFile?.delete(null);
-        } catch (e) {
+        } catch {
             // Already gone.
         }
         this._coverFile = null;
@@ -3619,7 +3626,7 @@ export class Sidebar {
         // windows have their new place.
         const scale = scaleFactor();
         const room = (this.config.values.layout.gap - EDGE) * scale;
-        const edgeFor = w => (room >= 6 * scale ? w + room : null);
+        const edgeFor = w => room >= 6 * scale ? w + room : null;
         this.actor.setEdge(edgeFor(Math.max(this.actor.width, width)));
         const setStrut = () => {
             this._strutWidth = width;

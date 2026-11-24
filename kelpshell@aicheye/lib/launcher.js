@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The launcher: one text field that searches apps, open windows and system
 // actions, evaluates arithmetic, and runs commands prefixed with ">".
 //
@@ -165,7 +167,12 @@ export function evaluate(expression) {
         while (['*', '/', '%'].includes(peek())) {
             const op = take();
             const r = power();
-            v = op === '*' ? v * r : op === '/' ? v / r : v % r;
+            if (op === '*')
+                v *= r;
+            else if (op === '/')
+                v /= r;
+            else
+                v %= r;
         }
         return v;
     }
@@ -851,29 +858,33 @@ export class Launcher {
 
         const url = asUrl(raw);
         if (url) {
-            scored.push({score: 190, result: {
-                gicon: this._browserIcon(),
-                title: raw,
-                subtitle: 'Open in the browser',
-                kind: 'Link',
-                hint: 'Enter to open',
-                activate: () => this._openUri(url),
-            }});
+            scored.push({
+                score: 190, result: {
+                    gicon: this._browserIcon(),
+                    title: raw,
+                    subtitle: 'Open in the browser',
+                    kind: 'Link',
+                    hint: 'Enter to open',
+                    activate: () => this._openUri(url),
+                },
+            });
         }
 
         if (/\d/.test(raw) && /[-+*/%^(]|[a-z]\(/i.test(raw)) {
             const value = evaluate(raw);
             if (value !== null) {
                 const textValue = formatNumber(value);
-                scored.push({score: 200, result: {
-                    gicon: new Gio.ThemedIcon({name: 'accessories-calculator-symbolic'}),
-                    title: textValue,
-                    subtitle: `${raw} =`,
-                    kind: 'Result',
-                    hint: 'Enter to copy',
-                    activate: () => St.Clipboard.get_default().set_text(
-                        St.ClipboardType.CLIPBOARD, textValue),
-                }});
+                scored.push({
+                    score: 200, result: {
+                        gicon: new Gio.ThemedIcon({name: 'accessories-calculator-symbolic'}),
+                        title: textValue,
+                        subtitle: `${raw} =`,
+                        kind: 'Result',
+                        hint: 'Enter to copy',
+                        activate: () => St.Clipboard.get_default().set_text(
+                            St.ClipboardType.CLIPBOARD, textValue),
+                    },
+                });
             }
         }
 
@@ -905,15 +916,17 @@ export class Launcher {
                 continue;
             const app = tracker.get_window_app(win);
             const ws = win.get_workspace();
-            scored.push({score, result: {
-                gicon: app?.get_icon() ?? new Gio.ThemedIcon({name: 'window-symbolic'}),
-                title,
-                subtitle: [app?.get_name(), ws ? `Workspace ${ws.index() + 1}` : null]
+            scored.push({
+                score, result: {
+                    gicon: app?.get_icon() ?? new Gio.ThemedIcon({name: 'window-symbolic'}),
+                    title,
+                    subtitle: [app?.get_name(), ws ? `Workspace ${ws.index() + 1}` : null]
                     .filter(Boolean).join('  ·  '),
-                kind: 'Window',
-                hint: 'Enter to switch',
-                activate: () => Main.activateWindow(win),
-            }});
+                    kind: 'Window',
+                    hint: 'Enter to switch',
+                    activate: () => Main.activateWindow(win),
+                },
+            });
         }
 
         for (const action of this._systemResults()) {
@@ -921,14 +934,16 @@ export class Launcher {
                 matchScore(q, action.title.toLowerCase())) * 0.8;
             if (score <= 0)
                 continue;
-            scored.push({score, result: {
-                gicon: new Gio.ThemedIcon({name: action.iconName}),
-                title: action.title,
-                subtitle: 'System',
-                kind: 'Action',
-                hint: 'Enter to confirm',
-                activate: action.run,
-            }});
+            scored.push({
+                score, result: {
+                    gicon: new Gio.ThemedIcon({name: action.iconName}),
+                    title: action.title,
+                    subtitle: 'System',
+                    kind: 'Action',
+                    hint: 'Enter to confirm',
+                    activate: action.run,
+                },
+            });
         }
 
         scored.sort((a, b) => b.score - a.score);

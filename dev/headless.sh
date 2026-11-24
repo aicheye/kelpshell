@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Run Kelpshell in a private headless GNOME Shell, without touching the
 # running session. It has its own D-Bus session, settings, and Wayland socket.
 #

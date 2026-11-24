@@ -2,6 +2,7 @@
   "uuid": "kelpshell@aicheye",
   "name": "Kelpshell",
   "description": "A sidebar shell with a scrolling window manager. Clock, workspace minimap, media, notifications and a launcher, with windows arranged in columns on a horizontal strip.",
+  "url": "https://github.com/aicheye/kelpshell",
   "shell-version": ["51"],
   "session-modes": ["user", "unlock-dialog"],
   "version": 1

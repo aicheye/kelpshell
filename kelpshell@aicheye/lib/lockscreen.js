@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The lock screen in the look of the cards.
 //
 // The shell builds its lock screen (ui/unlockDialog.js) each time the screen

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Server-side window decorations for chosen Wayland clients.
 //
 // A Wayland client asks the compositor for a title bar with the

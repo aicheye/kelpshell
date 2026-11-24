@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // GNOME settings that are changed while the extension is enabled.
 //
 // The original value of each key is written to

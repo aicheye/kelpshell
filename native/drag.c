@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Dragging files from the shell into a Wayland client.
 //
 // In Wayland a drag starts in a client: the compositor carries the offer

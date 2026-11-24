@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Keybindings from the config file.
 //
 // Mutter refuses to grab an accelerator that a GNOME setting already uses, so

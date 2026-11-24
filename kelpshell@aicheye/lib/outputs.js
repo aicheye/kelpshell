@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // What follows a change of the output device.
 //
 // When the default output becomes another device (chosen in the output menu,

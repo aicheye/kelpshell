@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // When the display goes off on the lock screen.
 //
 // The shell (ui/screenShield.js) ends every lock the same way: the lock

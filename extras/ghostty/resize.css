@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
 /*
  * Ghostty 1.4 draws the terminal on its own thread. For the first frames
  * after its window grows it shows the last picture at the old size and

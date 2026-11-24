@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The shell's prompts in the look of the cards: the authentication prompt,
 // the keyring, network and disk password prompts, the audio device prompt,
 // the power off and log out prompts, the run prompt, the permission prompts
@@ -51,6 +53,10 @@ export class Dialogs {
         // right after it, and is then added to its parent: the box is
         // wrapped at that point, before anything in it is shown or has the
         // key focus.
+        //
+        // In an overridden method `this` is the object the method is
+        // called on.
+        /* eslint-disable no-invalid-this */
         this._injections.overrideMethod(Dialog.Dialog.prototype, '_createDialog',
             original => function () {
                 original.call(this);
@@ -64,6 +70,7 @@ export class Dialogs {
                 original.call(this);
                 dialogs._opened(this);
             });
+        /* eslint-enable no-invalid-this */
         for (const actor of Main.layoutManager.modalDialogGroup.get_children()) {
             if (actor.dialogLayout instanceof Dialog.Dialog)
                 this._wrap(actor.dialogLayout);
