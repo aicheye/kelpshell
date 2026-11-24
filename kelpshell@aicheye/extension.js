@@ -30,6 +30,7 @@ import {LockPower} from './lib/lockpower.js';
 import {LockHold} from './lib/lockhold.js';
 import {LidLock} from './lib/lidlock.js';
 import {Outputs} from './lib/outputs.js';
+import {X11Size} from './lib/x11size.js';
 
 const ANY = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW;
 
@@ -85,6 +86,14 @@ export default class Kelpshell extends Extension {
             this.outputs.enable();
         } catch (e) {
             console.warn(`kelpshell: output devices: ${e.message}`);
+        }
+
+        // In both modes too: the lid can close while the screen is locked.
+        try {
+            this.x11Size = new X11Size();
+            this.x11Size.enable();
+        } catch (e) {
+            console.warn(`kelpshell: X11 window sizes: ${e.message}`);
         }
 
         // Before the first lock, so that its prompt is like the later ones.
@@ -269,6 +278,7 @@ export default class Kelpshell extends Extension {
             () => this.backdrop?.glass?.disable(),
             () => this.outputs?.disable(),
             () => this.lidLock?.disable(),
+            () => this.x11Size?.disable(),
         ]) {
             try {
                 stop();
@@ -298,6 +308,8 @@ export default class Kelpshell extends Extension {
         this.lidLock = null;
         this.outputs?.disable();
         this.outputs = null;
+        this.x11Size?.disable();
+        this.x11Size = null;
     }
 
     /**

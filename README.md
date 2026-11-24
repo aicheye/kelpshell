@@ -192,7 +192,7 @@ The script links the extension into `~/.local/share/gnome-shell/extensions`, so 
 
 ### Native modules
 
-Three small C modules add what a shell extension cannot do in JavaScript: a title bar for apps that would otherwise draw a fallback frame (Spotify and other Chromium apps), dragging a file from the downloads pile into a window, and even touchpad scrolling. `install.sh` builds them when `gcc` is installed. Everything else works without them.
+Four small C modules add what a shell extension cannot do in JavaScript: a title bar for apps that would otherwise draw a fallback frame (Spotify and other Chromium apps), dragging a file from the downloads pile into a window, even touchpad scrolling, and the right size for X11 windows (a fullscreen VLC, for example) after a monitor with another scale is connected or removed. `install.sh` builds them when `gcc` is installed. Everything else works without them.
 
 They are built for the installed GNOME Shell version. Run `./install.sh` again after an upgrade of GNOME.
 
