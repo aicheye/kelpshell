@@ -10,16 +10,16 @@
 // of the monitor size. The blurred copy is a small PNG in the cache directory
 // that St scales up. There is one per monitor size, and a card shows the one
 // of the monitor it is on: the picture of the primary monitor does not reach
-// a card on another monitor, which then had no fill at all. A wallpaper GdkPixbuf cannot read (an XML slideshow, for
-// example) gives flat tinted cards.
+// a card on another monitor, which would then have no fill at all. A
+// wallpaper GdkPixbuf cannot read (an XML slideshow, for example) gives flat
+// tinted cards.
 //
 // The PNG is named after what it is made from (the wallpaper file, its size
 // and time, the monitor size and the theme values), so a login finds the one
-// the last session made and decodes nothing. With theme.tintStrength at 1
-// the picture would be the tint in every pixel, so none is made and the
-// cards have that colour as their background. Until 2026-11-22 the wallpaper
-// was decoded once per monitor size at every start: 60 ms each for a
-// 6016 x 3900 PNG, also when nothing of it could show.
+// the last session made and decodes nothing: a decode takes 60 ms per
+// monitor size for a 6016 x 3900 PNG (measured). With theme.tintStrength at
+// 1 the picture would be the tint in every pixel, so none is made and the
+// cards have that colour as their background.
 //
 // With theme.liveBlur the cards of the sidebar show the windows under them,
 // blurred, over this picture, see lib/glass.js. Everything else that has
@@ -652,12 +652,10 @@ export class Backdrop {
      * the place its monitor has now, and a monitor whose picture has to be
      * made shows the flat tint until refresh() has made it.
      *
-     * Until 2026-11-23 the pictures stayed where they were until refresh()
-     * ran, 800 ms later. With the external monitor unplugged, the laptop
-     * panel showed the top left 1440 x 960 of the external monitor's 2560
-     * x 1440 picture for that time, 1.78 times too large, and then its own
-     * (the user, of the lock screen: "the scaling was off for my laptop
-     * and it like snapped into scale").
+     * refresh() runs 800 ms later. With the pictures left where they were
+     * for that time and the external monitor unplugged, the laptop panel
+     * would show the top left 1440 x 960 of the external monitor's 2560 x
+     * 1440 picture, 1.78 times too large, and then its own.
      */
     _place() {
         const monitors = Main.layoutManager.monitors;
@@ -714,7 +712,7 @@ export class Backdrop {
                 entries.push({
                     path: GLib.build_filenamev([this._dir, name]),
                     time: info.get_attribute_uint64('time::modified'),
-                    // A name from before 2026-11-22 is never asked for again.
+                    // Not a name _cachePath() gives: it is never asked for.
                     old: !/^backdrop-[0-9a-f]{32}\.png$/.test(name),
                 });
             }
@@ -745,9 +743,9 @@ export class Backdrop {
      * thread.
      *
      * The size of the file is asked for off the main thread too. gdk-pixbuf
-     * 2.44 starts a loader process for that, and get_file_info() waited for
-     * it: 135 to 280 ms in which the shell drew nothing, for a 6016 x 3900
-     * PNG (measured 2026-11-22).
+     * 2.44 starts a loader process for that, and get_file_info() waits for
+     * it: 135 to 280 ms in which the shell draws nothing, for a 6016 x 3900
+     * PNG (measured).
      */
     async _loadWallpaper(w, h) {
         const path = this._wallpaperPath();
@@ -775,12 +773,14 @@ export class Backdrop {
                 (_source, result) => {
                     try {
                         const pb = GdkPixbuf.Pixbuf.new_from_stream_finish(result);
-                        stream.close(null);
                         resolve(pb.new_subpixbuf(
                             Math.floor((pb.get_width() - w) / 2),
                             Math.floor((pb.get_height() - h) / 2), w, h).copy());
                     } catch (e) {
                         reject(e);
+                    } finally {
+                        // Also after a file that is no picture.
+                        stream.close_async(GLib.PRIORITY_LOW, null, null);
                     }
                 });
         });
@@ -868,19 +868,31 @@ export class Backdrop {
         actor.connectObject(
             'notify::allocation', () => this._queue(actor),
             'notify::mapped', () => this._queue(actor),
-            'destroy', () => this.detach(actor),
+            'destroy', () => this._forget(actor),
             this);
         this._queue(actor);
     }
 
+    /**
+     * Stop drawing the material on an actor. The style it was given goes
+     * with it: an actor of the shell (a notification banner, a row of the
+     * lock screen) is then drawn by the shell's stylesheet again.
+     */
     detach(actor) {
+        if (this._forget(actor)?.last)
+            actor.style = null;
+    }
+
+    /** Returns what was kept for the actor, or null if it was not attached. */
+    _forget(actor) {
         const state = this._attached.get(actor);
         if (!state)
-            return;
+            return null;
         if (state.laterId)
             global.compositor.get_laters().remove(state.laterId);
         actor.disconnectObject(this);
         this._attached.delete(actor);
+        return state;
     }
 
     /**

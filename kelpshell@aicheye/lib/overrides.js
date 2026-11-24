@@ -5,7 +5,7 @@
 // The original value of each key is written to
 // ~/.local/state/kelpshell/settings.json before the key is changed. disable()
 // puts the values back, and so does the next enable(), so a shell crash
-// cannot leave the user's settings changed.
+// cannot leave the settings changed.
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -35,9 +35,15 @@ export class Overrides {
         }
         if (changes.length === 0)
             return;
-        // Write the backup before touching anything.
-        GLib.mkdir_with_parents(GLib.path_get_dirname(this._path), 0o755);
-        GLib.file_set_contents(this._path, JSON.stringify(backup, null, 2));
+        // Write the backup before touching anything. A setting that cannot
+        // be put back later is left as it is.
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._path), 0o755);
+            GLib.file_set_contents(this._path, JSON.stringify(backup, null, 2));
+        } catch (e) {
+            console.warn(`kelpshell: settings left unchanged, no backup at ${this._path}: ${e.message}`);
+            return;
+        }
         for (const change of changes)
             change();
         Gio.Settings.sync();
@@ -54,7 +60,10 @@ export class Overrides {
             return;
         }
         const source = Gio.SettingsSchemaSource.get_default();
-        for (const {schema, key, value} of backup) {
+        for (const entry of Array.isArray(backup) ? backup : []) {
+            const {schema, key, value} = entry ?? {};
+            if (typeof schema !== 'string' || typeof key !== 'string')
+                continue;
             const found = source.lookup(schema, true);
             if (!found?.has_key(key))
                 continue;

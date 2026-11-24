@@ -260,9 +260,8 @@ export class Launcher {
             this.guest?.hover(global.stage.get_event_actor(event));
             return Clutter.EVENT_PROPAGATE;
         });
-        // A scroll over the list arrives here too. Until 2026-11-22 it was
-        // not handed over, and the list and the grid did not scroll over
-        // the launcher (the user: "i can't scroll").
+        // A scroll over the list arrives here too and is handed over, or
+        // the list and the grid would not scroll over the launcher.
         this._overlay.connect('scroll-event', (_a, event) => {
             return this.guest?.scroll(global.stage.get_event_actor(event), event)
                 ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
@@ -371,14 +370,14 @@ export class Launcher {
     }
 
     /**
-     * Open on the monitor the user works on. With follow, nothing is
+     * Open on the monitor that is worked on. With follow, nothing is
      * animated: the card is left where its opening animation starts, for a
      * swipe to move, see _onTouchpad. False when it did not open.
      */
     open(follow = false) {
         if (this.isOpen)
             return false;
-        // The monitor the user is working on, as the tiling sees it.
+        // The monitor that is worked on, as the tiling sees it.
         const monitor = Main.layoutManager.monitors[this._tiling.activeMonitor] ??
             Main.layoutManager.currentMonitor ?? Main.layoutManager.primaryMonitor;
         if (!monitor)
@@ -567,17 +566,18 @@ export class Launcher {
     }
 
     /**
-     * A line in the journal for each step of a four-finger swipe, four per
-     * swipe. On 2026-11-23 the user reported that the swipe does nothing in
-     * a session until Super has been pressed once. In the headless shell it
-     * opened the launcher every time: with Clutter swipe events put in the
-     * event queue, after a fresh start, after an unlock, with and without a
-     * window, on one monitor and two, and before the popups were drawn for
-     * the first time. These lines show which step is missing on the user's
-     * machine: `journalctl --user -b | grep 'launcher swipe'`.
+     * With launcher.swipeLog: a line in the journal for each step of a
+     * four-finger swipe, four per swipe. On one machine the swipe has done nothing in a session until
+     * Super was pressed once. The headless shell does not show that: there
+     * the swipe opens the launcher every time, with Clutter swipe events
+     * put in the event queue, after a fresh start, after an unlock, with
+     * and without a window, on one monitor and two, and before the popups
+     * are drawn for the first time. These lines show which step is missing
+     * where it fails: `journalctl --user -b | grep 'launcher swipe'`.
      */
     _note(text) {
-        console.log(`kelpshell: launcher swipe: ${text}`);
+        if (this._config.values.launcher.swipeLog)
+            console.log(`kelpshell: launcher swipe: ${text}`);
     }
 
     /** The fingers lifted: go the rest of the way to open, or close. */

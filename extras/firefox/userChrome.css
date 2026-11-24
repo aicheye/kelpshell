@@ -10,9 +10,9 @@
  *   raised        #2e2e32   #ebebed   header bar (dark), sidebar (light)
  *   panel         #36363a   #ffffff   popover, also the shell's own popups
  *
- * Until 2026-11-21 the surface was #16181d, the tint of the shell's cards,
- * which is bluer than those greys: a Firefox window next to a terminal
- * showed two different darks.
+ * The surface is not #16181d, the tint of the shell's cards, which is
+ * bluer than those greys: a Firefox window next to a terminal would show
+ * two different darks.
  *
  * It sets Firefox's own theme variables and adds no layout rules, so a
  * variable that a later Firefox renames stops applying and nothing breaks.

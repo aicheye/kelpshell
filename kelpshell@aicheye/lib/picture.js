@@ -114,12 +114,12 @@ export function picture({
         cancellable.cancel();
     });
     (async () => {
+        let stream = null;
         try {
-            const stream = file
+            stream = file
                 ? await openFile(file, cancellable)
                 : Gio.MemoryInputStream.new_from_bytes(bytes);
             const content = await decode(stream, 2 * Math.max(width, height), cancellable);
-            stream.close_async(GLib.PRIORITY_LOW, null, null);
             remember(key, content);
             if (alive) {
                 show(content);
@@ -128,6 +128,9 @@ export function picture({
         } catch {
             if (alive && !cancellable.is_cancelled())
                 fallback?.(actor);
+        } finally {
+            // Also after a file that could not be read as a picture.
+            stream?.close_async(GLib.PRIORITY_LOW, null, null);
         }
     })();
     return actor;

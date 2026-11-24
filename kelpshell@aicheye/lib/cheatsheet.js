@@ -202,9 +202,9 @@ export class Cheatsheet {
 
     /** The sheet with its rows and the size it has on monitor. */
     _lay(monitor) {
-        // Built again only for other shortcuts. Until 2026-11-22 the sheet
-        // was built on every opening: 26 ms in open(), a frame of 23 ms,
-        // and 20 ms of styles computed by St two frames into the animation.
+        // Built again only for other shortcuts. Building the sheet on
+        // every opening costs 26 ms in open(), a frame of 23 ms, and 20 ms
+        // of styles computed by St two frames into the animation.
         const built = JSON.stringify(this._config.values.keybindings);
         if (built !== this._built) {
             this._build();

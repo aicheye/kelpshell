@@ -15,19 +15,18 @@
 // handles here, with or without a bar. A client that was told the
 // compositor draws its frame (decorations.js) draws none, and one whose
 // frame is cut off (crop.js) has its resize border cut off with it, so the
-// window had no edge to drag (the user: "spotify window doesn't have resize
-// handles"). Mutter draws no frame for a Wayland client. The handles are
-// actors that draw nothing, around the window and its bar: HANDLE_OUT px
-// outside of the edge and HANDLE_IN px inside of it, and HANDLE_CORNER px
-// along both edges at a corner. A press on one starts the window manager's
-// own resize, as a press on the edge of a GTK window does.
+// window has no edge to drag. Mutter draws no frame for a Wayland client.
+// The handles are actors that draw nothing, around the window and its bar:
+// HANDLE_OUT px outside of the edge and HANDLE_IN px inside of it, and
+// HANDLE_CORNER px along both edges at a corner. A press on one starts the
+// window manager's own resize, as a press on the edge of a GTK window does.
 //
-// Until 2026-11-23 only the windows of windows.crop had them. A GTK window
+// The windows without a rule in windows.crop have them too. A GTK window
 // has a resize border of its own, in the room of the shadow it draws
 // around its frame, which lib/corners.js does not draw. That border starts
-// outside the frame, so a press on the edge of the window or just inside
-// it did nothing, where the same press resized Spotify (the user: "the
-// file explorer is missing resize handles too").
+// outside the frame, so without the handles a press on the edge of the
+// window or a little inside it does nothing, where the same press resizes
+// a window of windows.crop.
 
 import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';

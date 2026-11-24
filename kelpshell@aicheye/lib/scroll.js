@@ -4,9 +4,9 @@
 // movement of the fingers, and going on as long after them, as in Firefox.
 //
 // Each toolkit turns a scroll event into a distance of its own, and has its
-// own way of going on once the fingers are off the touchpad. Measured on
-// 2026-11-23 in the headless shell, with the same events sent to a window of
-// each (40 events of 10 units, 8 ms apart, then the end of the scroll):
+// own way of going on once the fingers are off the touchpad. Measured in the
+// headless shell, with the same events sent to a window of each (40 events
+// of 10 units, 8 ms apart, then the end of the scroll):
 //
 //                         px for one unit    px after the end    over
 //   GTK 4.24                  2.5                  870           2.6 s
@@ -14,9 +14,7 @@
 //   Chrome 158 (Wayland)     12.0                 2990           1.8 s
 //
 // A unit is one unit of wl_pointer.axis, which is what libinput reports for
-// the fingers. The user: "firefox scroll and native app scroll feel the same
-// but electron scrolling feels faster", and then "i like the firefox scroll
-// speed and acceleration, measure and make them all the same".
+// the fingers.
 //
 // Nothing in GTK or Chromium sets these, so it is done here, between the
 // touchpad and the windows. The native module (native/scroll.c) hands every
@@ -95,10 +93,10 @@ const SAMPLE_MS = 5;
 // too slowly for Firefox to go on. A toolkit works out the speed it goes on
 // with from the events of the time before the end: GTK 4 from the last 150
 // ms (SCROLL_CAPTURE_THRESHOLD_MS in gtkscrolledwindow.c). Told at once,
-// after fingers at 0.3 px for each ms, a GTK 4 window went on for 74 px and
-// Chrome for 14 px, where Firefox stays (measured 2026-11-23). Chrome still
-// went on, for 27 px, when it was told 200 ms after an event that was one
-// frame newer than the last of the touchpad (2026-11-24).
+// after fingers at 0.3 px for each ms, a GTK 4 window goes on for 74 px and
+// Chrome for 14 px, where Firefox stays (measured). Chrome still goes on,
+// for 27 px, when it is told 200 ms after an event that is one frame newer
+// than the last of the touchpad (measured).
 const REST_MS = 300;
 // ms between two reports of a touchpad, before any have told.
 const INPUT_MS = 8;
@@ -407,8 +405,8 @@ export class Scroll {
             pan.x += dx * 10 * sx * pxPerUnit * scale;
             pan.y += dy * 10 * sy * pxPerUnit * scale;
             // The event that ends the scroll moves nothing, and Firefox
-            // measures no speed from it. Counted as a speed of none, it made
-            // the mean of the last five a fifth too low.
+            // measures no speed from it. Counted as a speed of none, it
+            // would make the mean of the last five a fifth too low.
             if ((moved || !finish) && time > pan.sampleTime + SAMPLE_MS) {
                 const dt = time - pan.sampleTime;
                 pan.speeds.push({time, x: (pan.x - pan.sampleX) / dt, y: (pan.y - pan.sampleY) / dt});
@@ -513,9 +511,8 @@ export class Scroll {
      * come, the events are not one for each frame: a window gets two in one
      * frame and none in the next, and what it draws jumps and waits for the
      * same movement of the fingers. With events 8 ms apart on a 120 Hz
-     * monitor that was one frame of twice the distance in about every 25,
-     * in Firefox, GTK 4 and Chrome alike (measured 2026-11-24; the user:
-     * "the scroll bar definitely stutters on firefox"). The time an event
+     * monitor that is one frame of twice the distance in about every 25,
+     * in Firefox, GTK 4 and Chrome alike (measured). The time an event
      * spends in the shell's JavaScript, up to 1.3 ms in 3500 events, can
      * move one more over the edge of a frame.
      *
@@ -528,13 +525,13 @@ export class Scroll {
      *     the frame clock, as in _stepFling(), and is drawn towards the
      *     clock by a twentieth of what it is off.
      *   - "A little before" is this._lag: the time between two reports and
-     *     DELIVERY_MS, so that the report after the time read is there. It is what the window is behind the fingers, about
-     *     9 ms. It follows the reports by LAG_STEP of a frame time in each
-     *     frame and no faster. Until 2026-11-24 it was set by each report
-     *     at once: a report 2 ms later than the others moved the time read
-     *     back by 2 ms in one frame, a frame of two thirds of the others.
-     *     With reports 6 to 8 ms apart, frames were between 27% and 140% of
-     *     their mean (the user: "scroll doesn't feel smooth still").
+     *     DELIVERY_MS, so that the report after the time read is there. It
+     *     is what the window is behind the fingers, about 9 ms. It follows
+     *     the reports by LAG_STEP of a frame time in each frame and no
+     *     faster. Set by each report at once, a report 2 ms later than the
+     *     others would move the time read back by 2 ms in one frame, a
+     *     frame of two thirds of the others: with reports 6 to 8 ms apart,
+     *     frames are then between 27% and 140% of their mean (measured).
      *   - When the report after the time read is not there yet, the scroll
      *     is taken to go on as between the last two, for one frame time at
      *     the most. It is never taken back for that: when the reports then
@@ -624,9 +621,9 @@ export class Scroll {
      * the ms of this frame that came after the last of it.
      *
      * The movement after the fingers starts in the same frame, for those
-     * ms. Started with the next frame, it left this one with the rest of
-     * the fingers' way alone: 3.8 px between frames of 8 px (measured
-     * 2026-11-24).
+     * ms. Started with the next frame, it would leave this one with the
+     * rest of the fingers' way alone: 3.8 px between frames of 8 px
+     * (measured).
      */
     _endPan(pan, over) {
         const {finish, vx, vy} = pan.ending;
@@ -680,7 +677,7 @@ export class Scroll {
      * where it is. The window is told after REST_MS and not at once. Told
      * in the middle of the movement it goes on by itself, from the speed of
      * the last events: a GTK 4 window stopped 1.2 s into a fast movement
-     * went on for another 2.3 s (measured 2026-11-23).
+     * goes on for another 2.3 s (measured).
      */
     _haltFling() {
         const fling = this._fling;
@@ -705,15 +702,16 @@ export class Scroll {
      * frames of the monitor, from the frame clock: one, or more when the
      * shell has left frames out.
      *
-     * Until 2026-11-24 it was the time since the step before, read from the
-     * clock when the step ran. The frames of a monitor are shown the same
-     * time apart, and Mutter does not start its work for them the same time
-     * apart: it starts as late as the work of the last frames allows. A
-     * step that ran 2 ms late moved the window by a quarter more than its
-     * frame, and the next one by as much less (the user: "i occasionally
-     * feel stutters"). With steps delayed by 0 to 4 ms in the headless
-     * shell, the events sent were off the mean of their two neighbours by
-     * 22% on average and by up to 112%, and are by nothing now.
+     * It is not the time since the step before, read from the clock when
+     * the step runs. The frames of a monitor are shown the same time apart,
+     * and Mutter does not start its work for them the same time apart: it
+     * starts as late as the work of the last frames allows. With the time
+     * of the clock, a step that runs 2 ms late moves the window by a
+     * quarter more than its frame, and the next one by as much less. With
+     * steps delayed by 0 to 4 ms in the headless shell, the events sent
+     * that way are off the mean of their two neighbours by 22% on average
+     * and by up to 112% (measured). Counted in whole frames, they are off
+     * by nothing.
      */
     _stepFling(timeline) {
         const fling = this._fling;
@@ -755,8 +753,8 @@ export class Scroll {
      * Send a scroll event of (dx, dy) in Clutter's unit to a window.
      *
      * Chromium under Xwayland moves by whole px for each event and drops
-     * the rest: with events of 3.6 px each it moved 3 px for each, and
-     * ended a sixth short of the others (measured 2026-11-23). A window of
+     * the rest: with events of 3.6 px each it moves 3 px for each, and
+     * ends a sixth short of the others (measured). A window of
      * an X11 client gets events of whole px, and what is left of one goes
      * into the next. Each is a fiftieth of a px over the whole number: on
      * its way through Xwayland the number comes out a little under now and

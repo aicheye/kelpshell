@@ -39,9 +39,10 @@ export default class Kelpshell extends Extension {
      * the shell keeps the extension enabled while the screen is locked and
      * its stylesheet stays loaded. Everything of the session (the sidebar,
      * the tiling, the key bindings) is still taken down for that time, as
-     * the shell did by disabling the extension: actors added to the shell's
-     * chrome are drawn over the lock screen. What runs there is
-     * lib/lockscreen.js alone.
+     * the shell does when it disables an extension that names "user" alone:
+     * actors added to the shell's chrome are drawn over the lock screen.
+     * What runs there is lib/lockscreen.js, and the three parts that
+     * enable() starts for both modes.
      *
      * The session comes back from a lock as it was left: the work areas
      * are held (lib/lockhold.js), the tiling keeps its strips
@@ -50,10 +51,10 @@ export default class Kelpshell extends Extension {
     enable() {
         // When the session ends, the shell destroys its actors and then
         // still runs timers and signal handlers for a moment, without
-        // disabling its extensions. Each of ours that ran then met actors
-        // that were gone: 30 to 100 errors in the journal at every logout
-        // (seen 2026-11-22), each written with its stack. This signal comes
-        // before the actors go.
+        // disabling its extensions. Each of ours that runs then meets
+        // actors that are gone: 30 to 100 errors in the journal at every
+        // logout, each written with its stack. This signal comes before
+        // the actors go.
         this._ended = false;
         Main.layoutManager.uiGroup.connectObject('destroy', () => this._end(), this);
 
@@ -146,6 +147,21 @@ export default class Kelpshell extends Extension {
         // What a lock kept for this, see _disableUser.
         const kept = this._kept;
         this._kept = null;
+        try {
+            this._startUser(kept);
+        } catch (e) {
+            // A part did not start. The parts that did are taken down
+            // again: the session is then the shell's own, and not half of
+            // each. The next change of the session mode tries again.
+            console.error('kelpshell: could not start', e);
+            this._disableUser();
+            kept?.hold.release();
+            Main.notifyError('Kelpshell', `Could not start: ${e.message}`);
+        }
+    }
+
+    /** kept: what a lock kept for the unlock, or null. */
+    _startUser(kept) {
         kept?.hold.releasePanel();
 
         this.config = new Config();
@@ -187,8 +203,8 @@ export default class Kelpshell extends Extension {
 
         this.launcher = new Launcher(this);
         this.launcher.enable();
-        // The Super key opens the launcher where it used to open the overview.
-        // From a hot corner it opens on that corner's monitor.
+        // The Super key opens the launcher in place of the overview. From a
+        // hot corner it opens on that corner's monitor.
         this.tweaks.onSuper = monitor => {
             if (this.launcher.isOpen || Main.actionMode === Shell.ActionMode.NORMAL) {
                 if (!this.launcher.isOpen)
@@ -241,9 +257,9 @@ export default class Kelpshell extends Extension {
      * edge fade and the live blur. The output devices go away one by one
      * as the session ends, which is not a change to pause players for or to
      * load a preset for. Nothing is put back as it was before the
-     * extension: the whole of disable() made the shell 40 to 120 ms slower
-     * to end (measured 2026-11-22), with the last frame standing on the
-     * screen for that time.
+     * extension: the whole of disable() makes the shell 40 to 120 ms slower
+     * to end (measured), with the last frame standing on the screen for
+     * that time.
      */
     _end() {
         this._ended = true;
@@ -294,35 +310,49 @@ export default class Kelpshell extends Extension {
         if (!this._userOn)
             return;
         this._userOn = false;
-        const kept = lock
+        const kept = lock && this.sidebar
             ? {hold: new LockHold(), sidebar: this.sidebar.state, strut: this.sidebar.strutRect}
             : null;
-        // Before the popups it has clones of.
-        this.rehearsal?.disable();
-        this.rehearsal = null;
-        // The sidebar gives the status icons back to the top bar, so it goes
-        // before the tweaks that show the bar again.
-        this.keys.disable();
-        this.sidebar.disable();
-        this.cheatsheet.disable();
-        this.switcher.disable();
-        this.clipboard.disable();
-        clearPictures();
-        this.tweaks.onSuper = null;
-        this.launcher.disable();
-        this.tiling.disable(lock);
-        setServes(null);
-        this.scroll.disable();
-        this.decorations.disable();
-        this.dialogs.disable();
-        this.tweaks.disable();
-        kept?.hold.take(kept.strut);
+        // Every part is taken down, also after one of them has failed, and
+        // when some were never started (see _enableUser): the top bar and
+        // the shell's own key bindings come back in any case.
+        for (const step of [
+            // Before the popups it has clones of.
+            () => this.rehearsal?.disable(),
+            // The sidebar gives the status icons back to the top bar, so it
+            // goes before the tweaks that show the bar again.
+            () => this.keys?.disable(),
+            () => this.sidebar?.disable(),
+            () => this.cheatsheet?.disable(),
+            () => this.switcher?.disable(),
+            () => this.clipboard?.disable(),
+            () => clearPictures(),
+            () => {
+                if (this.tweaks)
+                    this.tweaks.onSuper = null;
+            },
+            () => this.launcher?.disable(),
+            () => this.tiling?.disable(lock),
+            () => setServes(null),
+            () => this.scroll?.disable(),
+            () => this.decorations?.disable(),
+            () => this.dialogs?.disable(),
+            () => this.tweaks?.disable(),
+            () => kept?.hold.take(kept.strut),
+            () => this.lockPicture?.disable(),
+            () => this.backdrop?.disable(),
+            () => settleNow(),
+            () => this.animator?.disable(),
+            () => this.config?.disable(),
+        ]) {
+            try {
+                step();
+            } catch (e) {
+                console.error('kelpshell: while disabling', e);
+            }
+        }
         this._kept = kept;
-        this.lockPicture.disable();
-        this.backdrop.disable();
-        settleNow();
-        this.animator.disable();
-        this.config.disable();
+        this.rehearsal = null;
         this.keys = this.sidebar = this.launcher = this.tiling = this.switcher = null;
         this.cheatsheet = this.decorations = this.clipboard = null;
         this.tweaks = this.backdrop = this.lockPicture = this.animator = this.config = null;

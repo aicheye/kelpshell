@@ -9,7 +9,7 @@
 // shown at every change of the text, and stays shown once
 // cursor-blink-timeout seconds have passed without one.
 //
-// lib/launcher.js has the same for its own field, written before this file.
+// lib/launcher.js has the same for its own field, in its own code.
 //
 // CaretBar is the same cursor as an actor of its own, for a field that is a
 // label: the picker (lib/clipboard.js) shows what is typed without taking
@@ -68,7 +68,8 @@ export class CaretBlink {
 
     destroy() {
         this._text.disconnectObject(this);
-        this._clear();
+        // Not left hidden in the half of a blink.
+        this.stop();
     }
 }
 

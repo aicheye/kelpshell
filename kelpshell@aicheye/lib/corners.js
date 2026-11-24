@@ -4,8 +4,8 @@
 //
 // Clients round their own corners, each with its own radius: 15 px in
 // libadwaita, 8 px and square bottom corners in GTK 3, something else in each
-// Electron app. The focus ring has one radius, so it only fitted the windows
-// that happened to share it.
+// Electron app. The focus ring has one radius, so it only fits the windows
+// that happen to share it.
 //
 // Here every window is cut to the rounded rectangle of its frame, with the
 // radius the focus ring is drawn with. Whatever the client drew outside that
@@ -43,9 +43,9 @@ const EFFECT = 'kelp-corners';
 const OUTLINE = [0.16, 0.16, 0.16, 0.16];
 // The outline of a window with a drawn title bar (lib/titlebar.js) is one
 // opaque colour instead, and the bar's border has the same one: 16% white
-// over the bar's #2e2e32. Mixed into the content, the line was 51 on
-// Spotify's black and 73 on the bar, and there was a third line where the
-// two met, so the window looked as if only its title bar had a border.
+// over the bar's #2e2e32. Mixed into the content, the line would be 51 on
+// Spotify's black and 73 on the bar, with a third line where the two meet,
+// so the window would look as if only its title bar had a border.
 const BAR_LINE_RGB = [79, 79, 83];
 export const BAR_LINE_CSS = `rgb(${BAR_LINE_RGB.join(', ')})`;
 const BAR_LINE = [...BAR_LINE_RGB.map(v => v / 255), 1];
@@ -168,11 +168,12 @@ let snippet = null;
 // is drawn with trilinear filtering, and Cogl makes the mipmaps for that
 // whenever the buffer has been redrawn.
 //
-// Until 2026-11-22 only the thumbnails were. The pictures of lib/glass.js
-// draw each window through a clone at an eighth of its size, which kept one
-// texel in 64, and another one after each pixel the window moved: under the
-// sidebar a pixel of blurred text changed by 1.7 to 3 levels of 255 for
-// each pixel of travel, and one of 1 px stripes by 30 to 70.
+// That is for every clone and not for the thumbnails alone. The pictures of
+// lib/glass.js draw each window through a clone at an eighth of its size.
+// With the nearest texel that keeps one texel in 64, and another one after
+// each pixel the window moves: under the sidebar a pixel of blurred text
+// then changes by 1.7 to 3 levels of 255 for each pixel of travel, and one
+// of 1 px stripes by 30 to 70 (measured).
 const thumbnails = new Map();
 
 // Minification and magnification filters for the offscreen buffer.

@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Windows that scroll off the left of the view pass under the sidebar and
-// fade into the wallpaper, where they used to stop at a hard vertical line
+// fade into the wallpaper. Without the fade they stop at a hard vertical line
 // next to the cards.
 //
 // The fade is the wallpaper drawn over the windows, opaque at the monitor
 // edge and transparent where the work area starts plus layout.gap. It runs
 // across the whole width the sidebar reserves: a shorter ramp reads as a hard
 // dark edge on a dark wallpaper.
-//
-// This module was removed on 2026-11-21 and put back the same day.
 //
 // With theme.liveBlur there is no fade: the windows run on to the edge of
 // the monitor, and under the sidebar they are blurred and darkened towards
@@ -29,31 +27,28 @@
 // to share, and a line of text gets wider and fainter towards the edge of
 // the monitor.
 //
-// Until 2026-11-21 there was only the 24 px picture, whole across 85% of
-// the width and mixed with the sharp windows across the last 15%. That
-// read as a band with one soft edge: text was either gone or sharp, and
-// in the 28 px between it was both at once.
+// The 24 px picture alone, whole across 85% of the width and mixed with the
+// sharp windows across the last 15%, reads as a band with one soft edge:
+// text is either gone or sharp, and in the 28 px between it is both at once.
 //
-// The pictures are see-through where no window is, so the
-// wallpaper stays as it is. The darkening is not drawn here. It is part of
-// the shader every window is cut with, which is given the place from here
-// (setShade in lib/corners.js), so it lies on the windows only and not on
-// the wallpaper between them, and the picture is made of windows that are
-// darkened already.
+// The pictures are see-through where no window is, so the wallpaper stays
+// as it is. The darkening is not drawn here. It is part of the shader every
+// window is cut with, which is given the place from here (setShade in
+// lib/corners.js), so it lies on the windows only and not on the wallpaper
+// between them, and the picture is made of windows that are darkened
+// already.
 //
-// Until 2026-11-21 only the cards blurred what was under them, and the
-// darkening lessened from the edge of the monitor on, so it was half of
-// theme.shade in the middle of the cards. The text of a window was sharp
-// and easy to read between the cards and behind the downloads pile.
+// With the blur under the cards only, the text of a window is sharp and
+// easy to read between the cards and behind the downloads pile: the
+// darkening is half of theme.shade in the middle of the cards.
 //
-// theme.shade was then 0.6, towards the tint, for some hours of
-// 2026-11-21. Over a white window that made a grey band as wide as the
-// sidebar, with a soft edge 15% of that width. It was 0 for the rest of
-// that day. Then it was 1, towards black, full across 25% of the width
-// and lessening across the other 75%, about 138 px. A white window was a
-// black slab at the edge of the monitor and went to white within 100 px.
-// It is 0.5 now and lessens across the whole width, so a white window is
-// mid grey (#808080) at the edge of the monitor and nowhere darker.
+// theme.shade is 0.5, towards black, and lessens across the whole width, so
+// a white window is mid grey (#808080) at the edge of the monitor and
+// nowhere darker. A shade of 0.6 towards the tint makes a grey band as wide
+// as the sidebar over a white window, with a soft edge 15% of that width. A
+// shade of 1 towards black, full across 25% of the width and lessening
+// across the other 75%, about 138 px, makes a white window a black slab at
+// the edge of the monitor that goes to white within 100 px.
 //
 // The gradient is a fragment shader on one clone of the wallpaper actor, so
 // the opacity changes on every pixel column. Where Cogl snippets are not
@@ -82,8 +77,8 @@ const SHADE = 0.5;
 const RESIZE_MS = 240;  // the sidebar's collapse animation, see sidebar.js
 // The blurred windows end this many px before the first column starts. A
 // redraw is asked for 1 px larger than what changed, so with the layers up
-// to that column every frame a window there drew also drew all of them
-// (measured 2026-11-22). They are see-through at that end.
+// to that column, every frame a window there draws also draws all of them
+// (measured). They are see-through at that end.
 export const EDGE = 2;
 const SHOW_MS = 200;
 

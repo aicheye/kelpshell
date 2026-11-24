@@ -7,16 +7,14 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 /**
  * Keeps the work areas as they are while the screen is locked.
  *
- * A lock takes the sidebar and the tweaks down (extension.js). The sidebar's
- * strut went with it, and the top bar reserved its edge of the screen again.
- * Mutter then made every window fit the new work area: on a 1920x1080
- * monitor a tile went from y 10 and 1060 px high to y 32 and 1048 px. After
- * the unlock the tiling started before the sidebar, with a work area as wide
- * as the monitor, and again when the sidebar had its strut. A full-width
- * window was asked for 1900 px and then for 1726 px, and was drawn shrinking
- * from one to the other over 0.3 s (the user, 2026-11-23: "when having a
- * window full width after locking and logging in there's a pretty big
- * layout shift").
+ * A lock takes the sidebar and the tweaks down (extension.js). Left at
+ * that, the sidebar's strut goes with it, and the top bar reserves its edge
+ * of the screen again. Mutter then makes every window fit the new work
+ * area: on a 1920x1080 monitor a tile goes from y 10 and 1060 px high to
+ * y 32 and 1048 px. After the unlock the tiling starts before the sidebar,
+ * with a work area as wide as the monitor, and again when the sidebar has
+ * its strut. A full-width window is asked for 1900 px and then for 1726 px,
+ * and is drawn shrinking from one to the other over 0.3 s.
  *
  * While this holds, an empty actor reserves what the sidebar's strut did,
  * and the top bar reserves nothing. No window is moved or resized by the

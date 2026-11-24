@@ -102,13 +102,16 @@ export class Tweaks {
                     `margin: ${this._config.values.layout.gap + BANNER_INSET}px;`;
                 shadow.style = margin;
                 this._backdrop.attach(banner, `${margin} `);
-                banner.connect('destroy', () => {
+                banner.connectObject('destroy', () => {
                     if (this._banner === banner)
                         this._banner = null;
-                    if (this._bannerShadow === shadow)
+                    // The shadow of an earlier banner went when this one
+                    // was added.
+                    if (this._bannerShadow === shadow) {
                         this._bannerShadow = null;
-                    shadow.destroy();
-                });
+                        shadow.destroy();
+                    }
+                }, this);
             },
             'transitions-completed', () => {
                 if (this._banner)
@@ -118,8 +121,8 @@ export class Tweaks {
         // The banner's own animation starts once its first frame is drawn,
         // see settle.js. The message tray creates the transitions after it
         // has added the banner, so they are looked for before the next
-        // frame. Until 2026-11-22 the first banner after a login took a
-        // step of 35% of the way in one frame.
+        // frame. Without this the first banner after a login takes a step
+        // of 35% of the way in one frame.
         bannerBin?.connectObject('child-added', (_bin, banner) => {
             if (banner === this._bannerShadow || this._bannerHoldId)
                 return;
@@ -205,8 +208,9 @@ export class Tweaks {
     /**
      * The monitor of the hot corner the pointer is pushed into, or -1. The
      * shell's corner calls overview.toggle() with nothing that says which
-     * corner it was, and each monitor can have one. The launcher opened on
-     * the monitor of the last click, which can be another one.
+     * corner it was, and each monitor can have one. Without this the
+     * launcher would open on the monitor of the last click, which can be
+     * another one.
      */
     _cornerMonitor() {
         const [x, y] = global.get_pointer();
@@ -483,10 +487,10 @@ export class Tweaks {
             menu.close();
             // A popup that was closed a moment ago is still fading out:
             // the Lock button of quick settings closes the popup and locks
-            // the screen in one go. Left to fade, it was drawn for those
-            // 150 ms where the lines below put it, at the top left corner
-            // of the monitor, and in the shell's grey without the material
-            // (seen 2026-11-22). It is hidden now.
+            // the screen in one go. Left to fade, it would be drawn for
+            // those 150 ms where the lines below put it, at the top left
+            // corner of the monitor, and in the shell's grey without the
+            // material. So it is hidden.
             const pointer = menu._boxPointer;
             if (pointer?.visible) {
                 pointer.remove_all_transitions();
@@ -509,8 +513,12 @@ export class Tweaks {
         this._sources.clear();
         this._styleMenus(false);
 
-        Main.sessionMode.colorScheme = this._colorScheme;
-        St.Settings.get().notify('color-scheme');
+        // Only what enable() got as far as saving is put back.
+        if (this._colorScheme !== undefined) {
+            Main.sessionMode.colorScheme = this._colorScheme;
+            this._colorScheme = undefined;
+            St.Settings.get().notify('color-scheme');
+        }
         Main.layoutManager.disconnectObject(this);
         this._unhookHotCorners();
         this._restoreOverview();
@@ -519,6 +527,9 @@ export class Tweaks {
         if (this._bannerHoldId)
             global.compositor.get_laters().remove(this._bannerHoldId);
         this._bannerHoldId = 0;
+        // A banner that is on the screen now is the shell's again.
+        this._banner?.disconnectObject(this);
+        this._banner?.remove_style_class_name('kelp-banner');
         this._bannerShadow?.destroy();
         this._bannerShadow = this._banner = null;
         const panelBox = Main.layoutManager.panelBox;
@@ -526,10 +537,14 @@ export class Tweaks {
         if (this._panelRecord)
             Object.assign(this._panelRecord, this._panelSaved);
         this._panelRecord = null;
-        panelBox.show();
+        // As the shell shows it: not over a fullscreen window.
+        panelBox.visible = !(global.window_group.visible &&
+            Main.layoutManager.primaryMonitor?.inFullscreen);
         Main.layoutManager._queueUpdateRegions();
 
-        Main.messageTray.bannerAlignment = this._bannerAlign;
+        if (this._bannerAlign !== undefined)
+            Main.messageTray.bannerAlignment = this._bannerAlign;
+        this._bannerAlign = undefined;
         global.workspace_manager.override_workspace_layout(
             Meta.DisplayCorner.TOPLEFT, false, 1, -1);
 
@@ -551,7 +566,7 @@ export class Tweaks {
             menu.close();
             return;
         }
-        // Its turn in lib/warm.js ends: it is shown to the user now.
+        // Its turn in lib/warm.js ends: it is shown on the screen.
         endRehearsal(menu.actor);
         this._point(menu, source, alignment);
         menu.open();
@@ -566,10 +581,11 @@ export class Tweaks {
      * open and close ("max-height" of the work area). The style this file
      * needs is another one, and St drops the style of every actor in the
      * popup, with the backgrounds it has drawn for them, each time the
-     * inline style of the popup changes. Opening the calendar then cost one
-     * frame of 17 to 19 ms to draw them again, and closing it one of 15 to
-     * 18 ms for a new layout. The button's handler is replaced by one that
-     * only marks the button as active, which is the other thing it does.
+     * inline style of the popup changes. Opening the calendar then costs
+     * one frame of 17 to 19 ms to draw them again, and closing it one of 15
+     * to 18 ms for a new layout. The button's handler is replaced by one
+     * that only marks the button as active, which is the other thing it
+     * does.
      *
      * The handler is found in the signal list the menu keeps (gjs
      * modules/core/_signals.js). Returns what disable() needs to put it
@@ -594,21 +610,22 @@ export class Tweaks {
     /**
      * A popup is placed next to the actor it was opened from only while
      * that actor is shown. The notifications card hides when the last
-     * notification is closed, and the calendar opened from it then went to
-     * the top left corner of the screen, still open. When the actor hides,
-     * an empty actor of the same place and size takes over as the one the
-     * popup follows, so the popup stays where it is. It is kept until the
-     * popup is opened again: the popup still needs it while it fades out.
+     * notification is closed, and the calendar opened from it would then
+     * go to the top left corner of the screen, still open. When the actor
+     * hides, an empty actor of the same place and size takes over as the
+     * one the popup follows, so the popup stays where it is. It is kept
+     * until the popup is opened again: the popup still needs it while it
+     * fades out.
      *
      * The empty actor is given its allocation here. The popup reads the
      * allocation of the actor it follows when it is laid out, and it is
      * laid out before an actor that was added after it. An actor that has
-     * never been laid out reports a box from +infinity to -infinity, the
-     * popup's place came out as NaN, and Clutter refused that box and gave
-     * what is in the popup no size. The calendar and the message list were
-     * then drawn without the card under them, and stayed on the screen
-     * after the popup had closed, because an actor of no size redraws
-     * nothing (seen 2026-11-23, with the calendar open as the last
+     * never been laid out reports a box from +infinity to -infinity. The
+     * popup's place then comes out as NaN, and Clutter refuses that box
+     * and gives what is in the popup no size. The calendar and the message
+     * list are then drawn without the card under them, and stay on the
+     * screen after the popup has closed, because an actor of no size
+     * redraws nothing (seen with the calendar open as the last
      * notification was cleared).
      */
     _watchSource(source) {
@@ -645,9 +662,9 @@ export class Tweaks {
      * -arrow-rise: the popup's distance from the sidebar, and the least
      * distance the box pointer keeps between the popup and the top and
      * bottom of the work area. Two layout gaps put the popup one gap inside
-     * the leftmost window on both axes. At one gap its corner sat on the
-     * window's corner, and the two different radii touched. The shell
-     * theme's own distance is 6px.
+     * the leftmost window on both axes. At one gap its corner would sit on
+     * the window's corner, and the two different radii would touch. The
+     * shell theme's own distance is 6px.
      *
      * max-height: the top bar button allows the whole work area. With the
      * top bar hidden that is the monitor height, and a popup that tall is
@@ -716,8 +733,8 @@ export class Tweaks {
      * drops the styles of every actor in a popup when the popup's own
      * inline style changes, so a popup shown here as the top bar has it
      * would be laid out and styled again on its first opening: the first
-     * show of the quick settings took 32 ms of the 34 that opening took,
-     * against 3 later (measured 2026-11-22).
+     * show of the quick settings then takes 32 ms of the 34 that opening
+     * takes, against 3 later (measured).
      */
     rehearseMenu(role, source, alignment) {
         const menu = Main.panel.statusArea[role]?.menu;

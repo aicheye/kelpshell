@@ -347,7 +347,7 @@ export class Switcher {
             windows = windows.filter(w => tracker.get_window_app(w) === app);
         }
         this._popup?.destroy();
-        // On the monitor the user works on, as the launcher is.
+        // On the monitor that is worked on, as the launcher is.
         const monitor = Main.layoutManager.monitors[this._tiling.activeMonitor] ??
             Main.layoutManager.primaryMonitor;
         const popup = new WindowSwitcher(windows, this._backdrop, monitor);

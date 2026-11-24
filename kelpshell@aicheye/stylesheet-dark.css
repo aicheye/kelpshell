@@ -39,14 +39,14 @@
 /* The cards of the sidebar. Their box draws nothing from 8px past them on
    (SidebarBox.setEdge in lib/sidebar.js: layout.gap less 2px), so the shadow
    has to be over by then. A box-shadow is not: St draws one 1.5 times its
-   blur wide, and with the 14px it had here it still had 40% of its opacity
-   at the cut. Over a bright window that runs under the cards that was a
-   strip beside them with a hard edge, 22 of 209 levels darker than the
-   window (measured 2026-11-22; a blur of 6px left 6 levels). The shadow is
-   drawn by lib/backdrop.js from these three values instead, as for the
-   popups: three box blurs 7px wide, close to a Gaussian, which reach 9px
-   and have less than one level left at 8px. A blur of 8px reaches 12px
-   and left 3 levels. */
+   blur wide, and with a blur of 14px it still has 40% of its opacity at
+   the cut. Over a bright window that runs under the cards that is a strip
+   beside them with a hard edge, 22 of 209 levels darker than the window
+   (measured; a blur of 6px leaves 6 levels). The shadow is drawn by
+   lib/backdrop.js from these three values instead, as for the popups:
+   three box blurs 7px wide, close to a Gaussian, which reach 9px and have
+   less than one level left at 8px. A blur of 8px reaches 12px and leaves
+   3 levels. */
 .kelp-sidebar .kelp-shadow {
   box-shadow: none;
   -kelp-shadow-y: 4px;
@@ -332,7 +332,7 @@
 /* Collapsed, the card padding is 4px: the row is 16 - 1 - 4 = 11px, and
    the cell behind the row's 4px padding is 7px. The card is 52px wide, so
    the row is 42px and a 34px cell has 4px on every side. With 3px of
-   padding it had 3px above and below and 4px at the sides. */
+   padding it would have 3px above and below and 4px at the sides. */
 .collapsed .kelp-ws {
   border-radius: 11px;
   padding: 4px;
@@ -419,8 +419,7 @@
   spacing: 10px;
 }
 /* 8px behind the 7px card padding. The cover in it has square corners, as
-   the picture itself has (the user, 2026-11-23: "don't round corner of album
-   art"). Until then it had 5px, and 7px collapsed. */
+   the picture itself has. */
 .kelp-media-jump {
   border-radius: 8px;
   padding: 3px;
@@ -647,8 +646,8 @@
 }
 /* 3px under the text: the icons above have 4px of padding and 2px of empty
    glyph box over their ink, the text has 3px under its digits. With no
-   padding here the column was 14px from the top of the button and 11.5px
-   from its bottom. */
+   padding here the column would be 14px from the top of the button and
+   11.5px from its bottom. */
 .collapsed .kelp-battery-time {
   font-size: 10px;
   padding: 2px 0 3px 0;
@@ -944,7 +943,7 @@
 }
 /* The scroll bars of the picker. The one of the shell is 8px wide: its
    handle has a 3px border that is meant to leave 2px, and St fills the
-   whole 8px (the user, 2026-11-22: "why's the scroll bar so thick"). */
+   whole 8px. */
 .kelp-clipboard StScrollBar {
   min-width: 4px;
 }
@@ -989,7 +988,7 @@
 /* 26px, and not a size between: Apple Color Emoji has pictures of 20, 26,
    32, 40, 48, 52, 64 and 96 px and no outlines, and cairo stretches the
    nearest one to any other size. At 21px the 20 px pictures (the 40 px ones
-   at a display scale of 2) were drawn 5% larger and blurred. 26px is 26 px
+   at a display scale of 2) are drawn 5% larger and blurred. 26px is 26 px
    at a scale of 1 and 52 px at 2, both pictures of the font. */
 .kelp-glyph-emoji {
   font-size: 26px;
@@ -1127,7 +1126,7 @@
 
 /* The wrapper has the popup's own corner radius from the shell theme. Its
    shadow is not a box-shadow: St cuts one off at the blur radius, and at 44px
-   that showed as the straight edges of a second rectangle around the popup.
+   that shows as the straight edges of a second rectangle around the popup.
    lib/backdrop.js draws the shadow from these three values. */
 .kelp-shadow-datemenu,
 .kelp-shadow-quicksettings {
@@ -1151,7 +1150,7 @@
 }
 /* The shell's flat buttons are not transparent. Their fill is #36363a, the
    colour of the shell's own popup, so on that popup they have no visible
-   shape. The card material is darker, and on it each of them showed as a
+   shape. The card material is darker, and on it each of them shows as a
    grey disc: every day of the calendar, the weekday letters, the month and
    its two arrows. Here they are transparent, and a state is a white fill at
    a low opacity. A declaration in an extension's stylesheet replaces the
@@ -1191,7 +1190,7 @@
 /* The cards inside the calendar popup: a media player or a notification,
    today's events, the world clocks, the weather. The shell fills them with
    #54545a and #47474c, greys made to sit on its own popup, #36363a. On the
-   card material, which is darker, they were the brightest surfaces of the
+   card material, which is darker, they are the brightest surfaces of the
    popup. Here they are a white fill at a low opacity, as the fills on the
    sidebar's cards are. Every state is given again, see above. */
 .kelp-menu .message,
@@ -1274,7 +1273,7 @@
 }
 /* The shell theme gives these a width in em of its 11pt, 28 and 24: 411px
    and 352px. In em of the 13.5px above they are that wide with 30 and 26,
-   and the lines break where they did. */
+   and the lines break where they do in the shell theme. */
 .kelp-dialog.prompt-dialog {
   width: 30em;
 }
@@ -1393,7 +1392,7 @@
   color: rgba(255, 255, 255, 0.78);
 }
 
-/* The authentication prompt: the picture and the name of the user. */
+/* The authentication prompt: the picture and the name of the account. */
 .kelp-dialog .polkit-dialog-user-layout {
   spacing: 8px;
   margin-bottom: 2px;
@@ -1486,9 +1485,9 @@
 }
 /* The wallpaper keeps 70% of its brightness (theme.lockTint), so a light
    part of it comes close to the white of the text: on a pale green the
-   date and the hint could not be read (the user, 2026-11-22). Every text
-   on the wallpaper has a soft dark shadow, and the lesser texts are whiter
-   than they were on the darker picture. */
+   date and the hint cannot be read as plain text. Every text on the
+   wallpaper has a soft dark shadow, and the lesser texts are close to
+   white. */
 .kelp-lock .unlock-dialog-clock .unlock-dialog-clock-time {
   text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
 }
@@ -1537,7 +1536,7 @@
   color: #ffffff;
   background-color: rgba(255, 255, 255, 0.14);
 }
-/* "Unlock with fingerprint", bottom left. It is not drawn: there it was too
+/* "Unlock with fingerprint", bottom left. It is not drawn: there it is too
    far from the entry to be seen, and lib/lockscreen.js shows its icon next
    to the entry (.kelp-lock-method below). It has the classes of the button
    above, so the fill of that button is taken off it here too. */
@@ -1564,8 +1563,8 @@
    wallpaper, as the clock is.
 
    The shell puts the middle of the prompt 50px under the middle of the
-   monitor, where the clock was not: 100px of margin under the prompt make
-   the two middles one.
+   monitor, where the middle of the clock is not: 100px of margin under the
+   prompt make the two middles one.
 
    The shell gives the prompt a height of 550px so that nothing moves when
    the entry appears. A height in a stylesheet is the height: the box does
@@ -1588,8 +1587,8 @@
   font-size: 13px;
 }
 /* The picture and the name carry the page, as the digits carry the clock
-   page: 136px and 26px over a 40px entry. At 96px and 18px they were small
-   beside the entry (the user, 2026-11-22). */
+   page: 136px and 26px over a 40px entry. At 96px and 18px they are small
+   beside the entry. */
 .kelp-lock .user-widget.vertical {
   spacing: 18px;
 }
@@ -1659,10 +1658,9 @@
   font-size: 12.5px;
 }
 /* The entry: a quarter black on the wallpaper, a light hairline, and the
-   shell's ring while it has the focus. Not the card material: a dark box
-   under the picture and the name was turned down (2026-11-22), and so was
-   the material on the entry alone. A light fill, like the circle behind
-   the picture, was here while the wallpaper was darker. */
+   shell's ring while it has the focus. It does not have the card material,
+   and there is no dark box under the picture and the name: the prompt is
+   on the wallpaper with no card. */
 .kelp-lock .login-dialog-prompt-entry,
 .kelp-lock .login-dialog-prompt-entry:hover,
 .kelp-lock .login-dialog-prompt-entry:focus,
@@ -1672,8 +1670,8 @@
   caret-color: #ffffff;
   selection-background-color: st-transparentize(-st-accent-color, 0.3);
   /* A quarter black with a light hairline. A light fill (white at 0.14)
-     over a light part of the wallpaper left white text at a contrast of 2
-     to 1; this gives 4 to 1 there. */
+     over a light part of the wallpaper leaves white text at a contrast of
+     2 to 1; this gives 4 to 1 there. */
   background-color: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 12px;
@@ -1686,7 +1684,7 @@
   color: rgba(255, 255, 255, 0.55);
 }
 /* 3px right of the cursor, which is at the start of the text: at the same
-   place the cursor was on the stem of the P of "Password". */
+   place the cursor would be on the stem of the P of "Password". */
 .kelp-lock .login-dialog-prompt-entry StLabel.hint-text {
   margin-left: 3px;
   color: rgba(255, 255, 255, 0.75);

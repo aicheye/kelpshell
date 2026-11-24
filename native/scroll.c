@@ -5,9 +5,9 @@
 //
 // Every toolkit turns the same scroll event into a distance of its own, and
 // goes on scrolling in its own way once the fingers are off the touchpad.
-// Measured on 2026-11-23 with one event stream sent to three windows: GTK 4
-// moved 2.5 px for each unit, Firefox 4 px and Chromium 12 px, and after the
-// end of the stream they went on for 870, 2460 and 2990 px. lib/scroll.js
+// Measured with one event stream sent to three windows: GTK 4 moves 2.5 px
+// for each unit, Firefox 4 px and Chromium 12 px, and after the end of the
+// stream they go on for 870, 2460 and 2990 px. lib/scroll.js
 // makes them equal: it changes the size of the events by the toolkit of the
 // window under the pointer, and sends the events of the time after the
 // fingers have left itself.
@@ -357,8 +357,11 @@ typedef GObjectClass KelpScrollClass;
 static void
 kelp_scroll_weak (gpointer data, GObject *gone)
 {
-    if (self.object == gone)
-        self.object = NULL;
+    if (self.object != gone)
+        return;
+    self.object = NULL;
+    // The copy of the last event is of no use to the next object.
+    g_clear_pointer (&self.last, clutter_event_free);
 }
 
 static void

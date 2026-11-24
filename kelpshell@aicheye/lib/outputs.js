@@ -25,9 +25,9 @@
 // chosen for it since the last change, and a login with another device is
 // a change of device like any other.
 //
-// EasyEffects is asked, and its settings file is not read: on 2026-11-22
-// version 8.2.8 had not written a preset loaded 20 seconds earlier to
-// ~/.config/easyeffects/db/easyeffectsrc.
+// EasyEffects is asked, and its settings file is not read: version 8.2.8
+// does not write a loaded preset to ~/.config/easyeffects/db/easyeffectsrc
+// within 20 seconds.
 //
 // A device is the sink's name. For a sink with several ports (the machine's
 // own card: speakers and the headphone jack) the port is part of it. A
@@ -221,19 +221,29 @@ export class Outputs {
     /** Call done with the name of the loaded output preset, '' for none, null on failure. */
     _ask(done) {
         const cancellable = this._asking = new Gio.Cancellable();
-        let proc;
+        let proc = null;
+        let timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ASK_TIMEOUT_MS, () => {
+            timeoutId = 0;
+            cancellable.cancel();
+            return GLib.SOURCE_REMOVE;
+        });
+        // Cancelled after ASK_TIMEOUT_MS or by disable(): the timer and the
+        // program end with the question.
+        cancellable.connect(() => {
+            if (timeoutId)
+                GLib.source_remove(timeoutId);
+            timeoutId = 0;
+            proc?.force_exit();
+        });
         const finish = answer => {
+            if (timeoutId)
+                GLib.source_remove(timeoutId);
+            timeoutId = 0;
             if (this._asking !== cancellable)
                 return;
             this._asking = null;
-            GLib.source_remove(timeoutId);
             done(answer);
         };
-        const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ASK_TIMEOUT_MS, () => {
-            proc?.force_exit();
-            cancellable.cancel();
-            return GLib.SOURCE_CONTINUE;
-        });
         try {
             proc = Gio.Subprocess.new(
                 [this._program, '--last-loaded-preset', 'output'],

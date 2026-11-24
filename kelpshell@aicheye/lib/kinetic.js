@@ -5,9 +5,8 @@
 //
 // St.ScrollView (GNOME Shell 51) moves its adjustment by each scroll event
 // and stops with the last one: st_scroll_view_scroll_event() adds
-// delta * page_size^(2/3) and nothing follows. A swipe on the touchpad moved
-// the grid of the picker as far as the fingers went and no further (the
-// user, 2026-11-22: "the scroll doesn't have acceleration").
+// delta * page_size^(2/3) and nothing follows. A swipe on the touchpad then
+// moves the grid of the picker as far as the fingers go and no further.
 //
 // The view still handles the events itself. This only watches them. Clutter
 // marks the event that ends a swipe (get_scroll_finish_flags), and from the

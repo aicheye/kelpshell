@@ -319,10 +319,10 @@ class Tile {
         // A new window that has not been mapped for OPEN_SIZE_MS yet. Its
         // first buffer often has another size than the one it was asked
         // for: Ghostty 360 px wide, then 858 px 35 ms later, Firefox
-        // 1280 px, then 858 px 120 ms later. Until then the window is drawn
-        // at the size of its place, whatever its frame is (_size). With the
-        // size spring it was drawn growing or shrinking from its first size
-        // while it faded in.
+        // 1280 px, then 858 px 120 ms later. For that time the window is
+        // drawn at the size of its place, whatever its frame is (_size).
+        // The size spring would draw it growing or shrinking from its
+        // first size while it fades in.
         this.opening = false;
         this._openId = 0;
 
@@ -354,12 +354,11 @@ class Tile {
      * of a new size: half of the change, so the window stays around its
      * middle. Mutter adds that to the position it was asked for. The Video
      * Player (Showtime) does this: leaving fullscreen on a 1440 px wide
-     * monitor its frame ended 386 px to the right of its place and 15 px
+     * monitor its frame ends 386 px to the right of its place and 15 px
      * above it, and after opening 261 px to the right. The tile is drawn
-     * at its place whatever its frame is, so clicks landed beside the
-     * window, and the shell's animation out of fullscreen ended at the
-     * frame (the user: "when i un full screen it goes to this weird
-     * position and the outline desyncs").
+     * at its place whatever its frame is, so with the frame left there
+     * clicks land beside the window, and the shell's animation out of
+     * fullscreen ends at the frame and not at the place.
      *
      * This runs in the window's size-changed signal, which Mutter emits
      * before it tells the shell about the new size, so that animation
@@ -386,9 +385,9 @@ class Tile {
      * A frame that is only wider is the client's minimum width, see
      * _queueWidthCheck().
      *
-     * Until 2026-11-21 only a smaller frame counted. A client that set a
-     * taller size of its own kept it: a Firefox window made from a dragged
-     * tab, and Spotify when it opened, reached past the bottom of the view.
+     * A taller frame counts too. A client that sets a taller size of its
+     * own would otherwise keep it: a Firefox window made from a dragged
+     * tab, and Spotify when it opens, reach past the bottom of the view.
      */
     _missized() {
         const r = this._request;
@@ -439,12 +438,10 @@ class Tile {
      *
      * The window manager asks the client for a size on every motion, and
      * the window's frame changes when the client has drawn it. Measured
-     * 2026-11-23 with an edge dragged 4 px every 16 ms: the edge of the
-     * test Spotify and of a Chrome window was 16 px behind the pointer
-     * (67 ms, four frames), the edge of a GTK window 4 px (17 ms). Until
-     * then everything was drawn at the window's frame, so the edge
-     * trailed the pointer by that much (the user: "spotify resizing feels
-     * laggy").
+     * with an edge dragged 4 px every 16 ms: the edge of the test Spotify
+     * and of a Chrome window is 16 px behind the pointer (67 ms, four
+     * frames), the edge of a GTK window 4 px (17 ms). Drawn at the
+     * window's frame, the edge would trail the pointer by that much.
      *
      * The content is drawn at the size it has. Where the frame asked for
      * is smaller, the shape cuts it off. Where it is larger, the room
@@ -452,10 +449,9 @@ class Tile {
      * pixels, drawn as wide as that room (_fillHeld), which continues the
      * background the window has at that edge.
      *
-     * For part of 2026-11-23 the whole window was scaled to the size asked
-     * for. Its content was then 3 to 5% narrower or wider than it is
-     * while the pointer moved and went back when it stopped (the user:
-     * "when i drag it the window inside is like sizing weirdly").
+     * The content is not scaled to the size asked for: it would be 3 to
+     * 5% narrower or wider than it is while the pointer moves, and go
+     * back when it stops.
      *
      * Not for a window that draws its own frame: that frame is part of
      * the content, and cannot be drawn ahead of it.
@@ -634,9 +630,9 @@ class Tile {
             fill.set_clip(cx - ox, cy - oy, cw, ch);
             // Scaled around the corner of the part that is drawn, so its
             // place does not depend on the scale. Scaled around the
-            // clone's own corner, the place was a product of about 800 px
+            // clone's own corner, the place is a product of about 800 px
             // and a scale of about 1000, which is exact to 1/16 px only,
-            // and the wallpaper showed in lines between the fills.
+            // and the wallpaper shows in lines between the fills.
             fill.set_pivot_point((cx - ox) / sw, (cy - oy) / sh);
             fill.set_scale(kx, ky);
             fill.set_position(x - (cx - ox), y - (cy - oy));
@@ -644,12 +640,12 @@ class Tile {
         };
         // Only the middle of that column or row, a 64th of a pixel: a
         // whole pixel drawn wider is mixed with the pixels on both sides of
-        // it, which gave the room a gradient.
+        // it, which gives the room a gradient.
         const thin = 1 / 64;
         const cx = sx + 0.5 - thin / 2, cy = sy + 0.5 - thin / 2;
         // Each fill reaches 1 px into the content next to it. Their edges
-        // are not exactly on whole pixels, and the wallpaper showed in a
-        // line where two of them met.
+        // are not exactly on whole pixels, and the wallpaper would show in
+        // a line where two of them meet.
         const ex = gx + 1, ey = gy + 1;
         const dx = left > 0 ? bx : bx - 1, dy = top > 0 ? by : by - 1;
         place(held.fills.x, gx > 0, cx, y1, thin, y2 - y1, ex / thin, 1, dx, y1);
@@ -683,12 +679,12 @@ class Tile {
      * Tiling._patchMapAnimation), so it fades in here and grows to its
      * place around the middle of it.
      *
-     * Until 2026-11-21 the shell animated the actor's scale from 1% around
-     * the bottom middle of the buffer, while this tile wrote the scale and
-     * the pivot of the same actor. Which of the two was drawn depended on
-     * which ran first. The size springs ran unseen during it, so the width
-     * jumped back when it was over, and the ring was laid out for a size
-     * the window was not drawn at.
+     * The shell's own animation scales the actor from 1% around the bottom
+     * middle of the buffer, and this tile writes the scale and the pivot
+     * of the same actor. With both, which of the two is drawn depends on
+     * which ran first. The size springs run unseen during the animation,
+     * so the width jumps back when it is over, and the ring is laid out
+     * for a size the window is not drawn at.
      */
     open(fade) {
         const actor = this.actor;
@@ -776,12 +772,14 @@ class Tile {
                 busy.connect('stopped', () => {
                     if (this._scaleWait === busy)
                         this._scaleWait = null;
+                    if (this.dead)
+                        return;
                     // After the shell's own handler for the end of its
                     // animation, which runs in this same emission and sets
                     // the actor's translation to 0, and before the frame is
-                    // drawn. An idle ran after that frame, so the window
-                    // was drawn at its frame for one frame, away from its
-                    // place on a strip that was still moving.
+                    // drawn. An idle would run after that frame, and the
+                    // window would be drawn at its frame for one frame,
+                    // away from its place on a strip that is still moving.
                     this._scaleId ||= global.compositor.get_laters().add(
                         Meta.LaterType.BEFORE_REDRAW, () => {
                             this._scaleId = 0;
@@ -808,11 +806,11 @@ class Tile {
      * A place that changes its width around the same middle is the place
      * of a column that is centred in the view, after cycle-width for
      * example. The window then stays around that middle at every width it
-     * is drawn at, so it grows or shrinks to both sides at once. Until
-     * 2026-11-21 its left edge went to the new place on its own spring,
-     * which starts with the key press, and its width followed when the
-     * client had taken the new size, 30 to 150 ms later: the window moved
-     * to the left first and then grew to the right.
+     * is drawn at, so it grows or shrinks to both sides at once. With its
+     * left edge on a spring of its own, which starts with the key press,
+     * and its width following when the client has taken the new size, 30
+     * to 150 ms later, the window would move to the left first and then
+     * grow to the right.
      */
     setTarget(rect, animate) {
         const old = this.target;
@@ -903,12 +901,12 @@ class Tile {
                 return GLib.SOURCE_REMOVE;
             // Not the size of its place: the client set a size of its own
             // after it took the one it was given. Firefox does when it
-            // restores its last session, and then stayed small in a
+            // restores its last session, and would stay small in a
             // full-size place. The same frame is asked for again, three
             // times at most, so a client that cannot take the size is left
             // alone after that. The count starts again once the client has
-            // taken the size (_onSizeChanged). Until 2026-11-21 it did not,
-            // and the fourth time a window changed its own size, it kept it.
+            // taken the size (_onSizeChanged). Otherwise the fourth time a
+            // window changes its own size, it would keep it.
             if (this._missized() && this._retries < 3) {
                 this._retries++;
                 this.applyFrame(true);
@@ -1028,13 +1026,14 @@ class Tile {
      * when its frame is. Any other is when its buffer is, which is larger
      * by the shadow the client draws.
      *
-     * Until 2026-11-22 such a window was at its place on the strip with a
-     * clip that left nothing of it, and was moved and scaled there in every
-     * frame of an animation. Its place can be on the next monitor. A clip
-     * does not limit the area an actor asks to have drawn again when it has
-     * children, so that monitor was drawn again in every one of those
-     * frames (220 frames in 15 changes of focus), and a client there was
-     * told to draw at that monitor's rate with nothing of it to see.
+     * Left at its place on the strip with a clip that leaves nothing of
+     * it, such a window would be moved and scaled there in every frame of
+     * an animation. Its place can be on the next monitor. A clip does not
+     * limit the area an actor asks to have drawn again when it has
+     * children, so that monitor would be drawn again in every one of
+     * those frames (measured: 220 frames in 15 changes of focus), and a
+     * client there would be told to draw at that monitor's rate with
+     * nothing of it to see.
      */
     _park(actor, frame, buffer, tx, kx, width) {
         const pivot = frame.x - buffer.x;
@@ -1145,10 +1144,10 @@ class Column {
         // The column of a new window that may still turn out to float
         // (Tiling._mayFloatLate). It has its place and its width, but the
         // columns after it stay where they are and the view does not scroll
-        // to it, so a window that leaves again has moved nothing. Until
-        // 2026-11-21 the columns to the right of a new 1Password window
-        // started to move over, and came back when its title arrived and
-        // matched the float rule.
+        // to it, so a window that leaves again has moved nothing. Otherwise
+        // the columns to the right of a new 1Password window would start
+        // to move over, and come back when its title arrives and matches
+        // the float rule.
         this.pending = false;
     }
 }
@@ -1225,9 +1224,9 @@ class Strip {
      * stays there. With centerFocusedColumn "always" the strip moves half
      * of the way, to the middle of the monitor.
      *
-     * Until 2026-11-21 the strip kept that room free, so a window that came
-     * in from the left over a fullscreen window stopped the width of the
-     * sidebar away from the edge.
+     * With that room kept free, a window that comes in from the left over
+     * a fullscreen window would stop the width of the sidebar away from
+     * the edge.
      */
     _shiftFor(col, scroll, viewW) {
         const room = this._room;
@@ -1258,18 +1257,16 @@ class Strip {
      * on the right. The strip is not kept inside its ends for that, since
      * nothing of it shows but the windows over the fullscreen one.
      *
-     * Until 2026-11-22 the strip scrolled the least distance that showed
-     * the column and stayed inside its ends. A window that was made
-     * narrower at the right edge then stood away from it by the width it
-     * lost, in the middle of the fullscreen window (the user: "if i add a
-     * window while fullscreen and resize it doesn't align to the edge").
+     * Scrolling the least distance that shows the column, inside the ends
+     * of the strip, would leave a window that is made narrower at the
+     * right edge away from it by the width it lost, in the middle of the
+     * fullscreen window.
      *
-     * Also until 2026-11-22 a strip narrower than the view (centerColumns,
-     * centerSingleColumn) stayed centred here. The fullscreen window's
-     * column counts in that width, so one window over it stood at
-     * (viewW - totalWidth) / 2 from the edge, and a second one made the
-     * strip wider than the view and put both against the edge (the user:
-     * "when there's only 1 window peeking it's not aligned").
+     * A strip narrower than the view (centerColumns, centerSingleColumn)
+     * is not centred here either. The fullscreen window's column counts
+     * in that width, so one window over it would stand at
+     * (viewW - totalWidth) / 2 from the edge, and a second one would make
+     * the strip wider than the view and put both against the edge.
      */
     _coverSide(col) {
         if (this._coverAt < 0 || !col || col.pending ||
@@ -1297,9 +1294,7 @@ class Strip {
      * The proportion of the widest column. 1 is the width of the view.
      * Over a fullscreen window it is the width of the monitor less a gap
      * on each side: the cards are out of view there, so maximize-column
-     * fills the monitor (the user: "super f while full screen should make
-     * the window actual full screen since the effective work area is the
-     * whole screen"). The column is as wide as the view again when the
+     * fills the monitor. The column is as wide as the view again when the
      * window leaves fullscreen.
      */
     get fullProportion() {
@@ -1447,10 +1442,8 @@ class Strip {
         // edge of the monitor. On the primary monitor the cards blur that
         // part of the window (lib/glass.js), or with theme.liveBlur off it
         // fades into the wallpaper (lib/edgefade.js). The cards are chrome
-        // and are drawn above the windows.
-        //
-        // For part of 2026-11-21 the cut was at the work area, which ended
-        // the window in a vertical line next to the sidebar.
+        // and are drawn above the windows. A cut at the work area would
+        // end the window in a vertical line next to the sidebar.
         const mon = this.monitorRect;
         this._view = [mon.x, mon.x + mon.width];
         this._room = this.room;
@@ -1495,12 +1488,10 @@ class Strip {
             // The window does not go as narrow as asked. Its minimum is
             // the width of no preset, and next to one of them the
             // difference is too small to be a width of its own: the column
-            // takes the preset's. Until 2026-11-23 it took the minimum.
-            // Spotify (800 px) on a view where 2/3 is 827 px went from 827
-            // to 800 and back with cycle-width, and was 27 px short of
-            // the column grid at 1/3 and 1/2 (the user: "if the minimum
-            // window size is too close to a breakpoint, it should just use
-            // the breakpoint instead").
+            // takes the preset's. At its minimum, Spotify (800 px) on a
+            // view where 2/3 is 827 px would go from 827 to 800 and back
+            // with cycle-width, and be 27 px short of the column grid at
+            // 1/3 and 1/2.
             const near = this.wm.config.values.layout.presetWidths
                 .map(width)
                 .filter(w => w >= least && w <= cap && w - least <= viewW * MIN_SNAP_SHARE);
@@ -1632,13 +1623,11 @@ class Strip {
      * width it has now, or as near to that as the ends of the strip allow.
      *
      * The view is never past an end of the strip: columns that are as wide
-     * as the view together leave no empty space beside them. Until
-     * 2026-11-22 a view that was placed by hand (center-column, or a
-     * column made narrower after it was as wide as the view) was not kept
-     * inside the ends. The last column, made full width and narrower again
-     * with maximize-column, then stood in the middle with nothing on its
-     * right (the user: "if there are enough windows to fill the screen
-     * something should always be aligned to the monitor edges").
+     * as the view together leave no empty space beside them. That holds
+     * for a view that was placed by hand too (center-column, or a column
+     * made narrower after it was as wide as the view). Otherwise the last
+     * column, made full width and narrower again with maximize-column,
+     * would stand in the middle with nothing on its right.
      */
     keepAnchor(col, anchor) {
         if (!anchor || !this.columns.includes(col))
@@ -1904,10 +1893,10 @@ class Strip {
      * SWIPE_STEP_SHARE of the view, and gives it back when they return to
      * within half of that.
      *
-     * Until 2026-11-21 focus moved when the fingers lifted. With two narrow
-     * columns side by side the view has nowhere to settle but where it
-     * was, so the picture followed the fingers, went back, and the ring
-     * changed windows only after that.
+     * With focus moved only when the fingers lift, two narrow columns side
+     * by side would show it late: the view has nowhere to settle but where
+     * it was, so the picture would follow the fingers and go back, and the
+     * ring would change windows only after that.
      */
     _swipeStep(s) {
         const travel = s.raw - s.base;
@@ -2015,9 +2004,9 @@ class Strip {
         // way the view then settles with the column that took focus in the
         // middle, or as near to it as the ends of the strip allow.
         //
-        // Until 2026-11-21 it scrolled the least distance that showed that
-        // column whole. For a column that was whole already the view went
-        // back to where the swipe began, against the motion of the fingers.
+        // Scrolling the least distance that shows that column whole would,
+        // for a column that is whole already, take the view back to where
+        // the swipe began, against the motion of the fingers.
         //
         // Fingers that rested before they lifted placed the view by hand:
         // it settles on the nearest column edge, and focus stays where it
@@ -2079,7 +2068,8 @@ class Strip {
     // A fullscreen window is not on the strip: it covers the monitor, and
     // the window that has focus is drawn over it at its place on the strip.
     // The other tiles are under it, so scrolling them shows nothing, and a
-    // swipe used to change the picture only when the fingers lifted.
+    // swipe that scrolled the strip would change the picture only when the
+    // fingers lift.
     //
     // Here a swipe moves one thing, and that thing follows the fingers:
     //   - towards a column: the window of that column that will take focus
@@ -2104,44 +2094,29 @@ class Strip {
     // The focus keys do the same without the fingers, see coverStep(): the
     // window or the sidebar comes in or leaves on its spring.
     //
-    // Until 2026-11-21 the sidebar came in before the column on the left
-    // and stayed when the fingers lifted, and a focus key raised the window
-    // of the next column over the fullscreen one in a single frame.
-    //
-    // Until 2026-11-22 a swipe back from the second of two windows over
-    // the fullscreen one treated the first as a window that comes in: it
-    // jumped from its place to the edge of the monitor and came in again.
-    // The second stayed over the fullscreen window, and the next swipe back
-    // moved the first across it, then the second went in a single frame.
-    //
     // A swipe that begins while the last one's window is still on its way
     // takes that window where it is drawn and moves nothing else, see
     // _catch. The same for the sidebar on its way out, see _coverPlan.
     // And a swipe that begins within SWIPE_AGAIN_MS of one the same way
     // does not go on from a window to the sidebar or from the sidebar to
-    // a window, see _coverAgain.
+    // a window, see _coverAgain. Without these, a swipe would put the
+    // window at the end of its way in one frame and begin from there:
+    // after a swipe that sends a window out to the right, a second one the
+    // same way would bring the sidebar in, and one the other way would
+    // bring the window in again from the edge of the monitor.
     //
     // The windows that are over the fullscreen one already, and stay
     // there, go to the place they have after the swipe with the fingers
-    // too, see _coverRest. Until 2026-11-23 they stayed where they were
-    // until the fingers lifted: a second window came in over the first,
-    // and the first moved over on its spring after that (the user: "when
-    // full screen peeking windows, the inner window doesn't swipe out with
-    // the outer window", "swipe in/out").
-    // Until 2026-11-22 a swipe put a window that was on its way at the end
-    // of it in one frame and then began from there. After a swipe that
-    // sent a window out to the right, a second one the same way brought
-    // the sidebar in, and one the other way brought the window in again
-    // from the edge of the monitor (the user: "if i swipe out a window
-    // sometimes it'll swipe in the sidebar and also like if i try to
-    // 'catch' a swipe out it won't respond").
+    // too, see _coverRest. Otherwise they would stay where they are until
+    // the fingers lift: a second window would come in over the first, and
+    // the first would move over on its spring after that.
 
     /** The fullscreen tile that covers this strip's monitor, or null. */
     get cover() {
         // A strip on a workspace that is not shown keeps the layout it
         // had when it was: the monitor's state is that of the workspace
-        // in view. Without this a window as wide as the monitor took the
-        // width of the view when its workspace was left, and its own
+        // in view. Without this a window as wide as the monitor would take
+        // the width of the view when its workspace is left, and its own
         // again on the way back.
         const ws = this.workspace;
         const shown = !ws || ws === global.workspace_manager.get_active_workspace();
@@ -2161,11 +2136,8 @@ class Strip {
         const next = at >= 0 ? this.columns[at + dir] ?? null : null;
         // The cards are over the fullscreen window to stay. A swipe to
         // the right takes them out, by as much as the fingers travel, and
-        // moves nothing else. Until 2026-11-22 the cards left on their own
-        // when the fingers lifted, and this swipe brought in the window of
-        // the column on the right (the user: "if i slide out a sidebar i
-        // think it gets detected as a slide left and the window to the
-        // right comes in i don't want that behaviour").
+        // moves nothing else: it does not bring in the window of the
+        // column on the right.
         if (peek?.available(this.monitor) && peek.held()) {
             if (dir > 0) {
                 const from = peek.amount();
@@ -2175,9 +2147,9 @@ class Strip {
                 return {kind: 'none', dir};
         }
         // The cards are on their way out after such a swipe. This one
-        // takes them where they are: on out, or back in. Until 2026-11-22
-        // a second swipe to the right brought in the window of the column
-        // on the right while they left.
+        // takes them where they are: on out, or back in. A second swipe
+        // to the right does not bring in the window of the column on the
+        // right while they leave.
         if (peek?.available(this.monitor) && !peek.held() && peek.amount() > 0) {
             const from = peek.amount();
             return dir > 0
@@ -2427,9 +2399,9 @@ class Strip {
             if (!s.plan && dir !== 0)
                 s.plan = this._coverPlan(s, dir);
             // The fingers do not travel on past the place where what they
-            // move stops. Until 2026-11-21 they did, and on the way back
-            // the sidebar or the window stayed where it was until they had
-            // come back as far as they had gone past it.
+            // move stops. If they did, on the way back the sidebar or the
+            // window would stay where it is until they had come back as
+            // far as they had gone past it.
             const reach = s.plan?.reach;
             if (Number.isFinite(reach))
                 s.travel = dir * Math.min(Math.abs(s.travel), reach);
@@ -2609,8 +2581,9 @@ class Strip {
             // place it had before the leaving one came in, while that one
             // leaves. It does the same in the other direction when a
             // window comes in. Without the scroll kept in cameFrom the
-            // strip scrolled the least distance, and the window that
-            // stayed moved to the left while the other left to the right.
+            // strip would scroll the least distance, and the window that
+            // stays would move to the left while the other leaves to the
+            // right.
             const before = tiles.find(t => t.cameFrom !== null)?.cameFrom ?? this.scroll;
             const [lo, hi] = this._scrollRange(viewW);
             if (hi > lo) {
@@ -2738,11 +2711,6 @@ class Strip {
      * go under the fullscreen window again, and it returns to the place it
      * had before they came in, as after a swipe or a focus key back to it.
      * Returns false when no window is past it.
-     *
-     * Until 2026-11-22 those windows stayed where they were, next to the
-     * edge of the monitor (the user: "when i'm peeking two windows and i
-     * click on the outer window, the window close to the edge should
-     * de-peek").
      */
     coverFocus(tile) {
         const cover = this.cover;
@@ -2784,9 +2752,9 @@ class Strip {
      * The strip returns to that scroll, so to has the place it had then,
      * as after a swipe back (_coverLeave).
      *
-     * Until 2026-11-22 the strip kept its scroll. With two windows over
-     * the fullscreen one, closing the second left the first at the left of
-     * the view, and from there the strip moved it into the room of the
+     * With the scroll kept as it is and two windows over the fullscreen
+     * one, closing the second would leave the first at the left of the
+     * view, and from there the strip would move it into the room of the
      * sidebar, to the left edge of the monitor.
      */
     coverGone(to, before) {
@@ -2875,11 +2843,9 @@ class FocusRing {
         // After the shell's own handler, which was connected first and has
         // started its animation of the size change by now. The window's own
         // size-changed signal comes before that handler, so a sync from it
-        // finds no animation to follow.
-        //
-        // Until 2026-11-21 nothing placed the ring after the animation had
-        // started. A window that left fullscreen shrank to its place over
-        // 250 ms, and the ring was at that place from the first frame.
+        // finds no animation to follow. With that sync alone, a window
+        // that leaves fullscreen would shrink to its place over 250 ms
+        // with the ring at that place from the first frame.
         global.window_manager.connectObject('size-changed', (_wm, actor) => {
             if (actor.meta_window !== this.win)
                 return;
@@ -2895,10 +2861,9 @@ class FocusRing {
     /**
      * win is closing. If the ring is on it, a copy of the ring stays on
      * the window while the shell shrinks and fades it (_leave), and the
-     * ring itself goes to the window that takes the focus.
-     *
-     * Until 2026-11-22 the ring left a closing window on the first frame,
-     * and the window was drawn for 150 ms more without it.
+     * ring itself goes to the window that takes the focus. Without the
+     * copy, the closing window would be drawn for 150 ms more with no
+     * ring.
      */
     leaving(win) {
         const actor = win.get_compositor_private();
@@ -3097,7 +3062,7 @@ class FocusRing {
         const strip = this.wm.tiles.get(this.win)?.strip;
         const clip = strip?.clipFor(x - w, width + 2 * w);
         // Nothing of the window is in the view. St asks for a redraw of the
-        // whole ring whatever its clip, which was on the next monitor.
+        // whole ring whatever its clip, which can be on the next monitor.
         if (clip && clip[1] <= 0) {
             this.actor.hide();
             return;
@@ -3115,8 +3080,8 @@ class FocusRing {
      * from nothing at a corner of the monitor, or one that leaves
      * fullscreen, 250 ms from the size of the monitor. null when it does not.
      *
-     * Until 2026-11-21 the ring was at the window's place at rest from the
-     * first frame, so it was there before the window.
+     * The ring follows this frame. At the window's place at rest from the
+     * first frame, it would be there before the window.
      */
     _animated() {
         const win = this.win;
@@ -3213,6 +3178,7 @@ export class Tiling {
         this.strips = new Map();
         this.floating = new Set();     // floated by hand in this session
         this.raised = new Set();       // put over the other windows by layout.above
+        this._recentring = new Map();  // window -> id of its size-changed handler, see _floatLate
         this.refused = new Set();      // did not take the size of a column, see _refusedSize
         this.forced = new Set();       // tiled by hand against the automatic rules
         this._born = new Map();        // window -> ms when it was created
@@ -3342,11 +3308,11 @@ export class Tiling {
      * once the sidebar is enabled: the places on a strip with a fullscreen
      * window depend on the room the sidebar takes (peekSink).
      *
-     * Until 2026-11-23 this was the end of enable(), before the sidebar
-     * was there. After an unlock a window over a fullscreen one was asked
-     * for 945 px, half of a view as wide as the monitor, drawn 87 px to
-     * the left of its place, and moved to its 858 px over 0.3 s once the
-     * sidebar had set its strut.
+     * Done at the end of enable(), before the sidebar is there, this
+     * would ask a window over a fullscreen one for the wrong width after
+     * an unlock. Measured: 945 px, half of a view as wide as the monitor,
+     * drawn 87 px to the left of its place, then 0.3 s of motion to its
+     * 858 px once the sidebar had set its strut.
      */
     adopt() {
         this._adopt();
@@ -3363,11 +3329,15 @@ export class Tiling {
         savedLayout = this._save(keep);
 
         global.display.disconnectObject(this);
+        global.window_manager.disconnectObject(this);
         global.workspace_manager.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
         global.stage.disconnectObject(this);
         for (const win of global.display.list_all_windows())
             win.disconnectObject(this);
+        for (const win of [...this._recentring.keys()])
+            this._stopRecentring(win);
+        this._endDrag();
 
         for (const tile of this.tiles.values())
             tile.destroy(!keep);
@@ -3387,7 +3357,6 @@ export class Tiling {
         this.dropHint.destroy();
         this.fade.disable();
         this.fade = null;
-        this._drag = null;
         this.titlebars.disable();
         this.titlebars = null;
         this.corners.disable();
@@ -3428,12 +3397,12 @@ export class Tiling {
      * and the window in focus, and for the whole the current tile and the
      * windows floated or tiled by hand.
      *
-     * Until 2026-11-23 only the order of the columns and their widths were
-     * kept. After an unlock every strip started at scroll 0 with no focus
-     * and no current tile, and moved to where the focus was on the springs:
-     * a full-width window was drawn 112 px to the left of its place in the
-     * first frame. A window floated by hand was tiled again, and a
-     * fullscreen window left its strip.
+     * The order of the columns and their widths are not enough. With
+     * those alone every strip would start at scroll 0 after an unlock,
+     * with no focus and no current tile, and move to where the focus is
+     * on the springs: a full-width window was measured 112 px to the left
+     * of its place in the first frame. A window floated by hand would be
+     * tiled again, and a fullscreen window would leave its strip.
      */
     _save(kept) {
         const current = this._currentPending ? this._wantCurrent : this.currentTile;
@@ -3525,7 +3494,7 @@ export class Tiling {
     /**
      * The strip the keys and the swipe act on: the one of the focused
      * window, or without one, the strip on the active workspace of the
-     * monitor the user works on (see activeMonitor).
+     * active monitor (see activeMonitor).
      */
     activeStrip() {
         if (this.focusTile?.strip)
@@ -3614,11 +3583,10 @@ export class Tiling {
             return false;
         // A fullscreen window allows no resize and cannot be maximized,
         // whatever it is when it is not fullscreen. One that is a tile
-        // stays a tile. Until 2026-11-22 it was asked like any window when
-        // it was shown again, which is every return to its workspace: it
-        // left the strip there, no key reached it any more, and leaving
-        // fullscreen did not bring it back (the user: "i can't go to the
-        // fullscreened window and peeking breaks").
+        // stays a tile. Asked like any window when it is shown again,
+        // which is every return to its workspace, it would leave the strip
+        // there: no key would reach it, and leaving fullscreen would not
+        // bring it back.
         if (win.is_fullscreen() && this.tiles.has(win))
             return true;
         if (!win.allows_resize())
@@ -3708,12 +3676,11 @@ export class Tiling {
      *
      * The title is one way to find out, see _onTitle. It is not enough:
      * 1Password opens every prompt as a window that can be resized and
-     * maximized, and only Quick Access had a title rule. Its request to
-     * use an SSH key got a column and no always on top (the user,
-     * 2026-11-23: "1passwqord not floating? why and also not on top").
-     * The two signs used here do not need the title: the window stops
-     * allowing a resize (_onResizeable), or it did not take the size of
-     * its column (_settleLater).
+     * maximized, and only Quick Access has a title rule. By the title
+     * alone, its request to use an SSH key would get a column and would
+     * not be always on top. The two signs used here do not need the
+     * title: the window stops allowing a resize (_onResizeable), or it
+     * did not take the size of its column (_settleLater).
      */
     _floatLate(win) {
         if (!this.tiles.has(win))
@@ -3722,13 +3689,23 @@ export class Tiling {
         this._centre(win);
         // Out of its column, the client can go back to a size of its own.
         const until = GLib.get_monotonic_time() / 1000 + PENDING_MS;
-        const id = win.connect('size-changed', () => {
+        this._stopRecentring(win);
+        this._recentring.set(win, win.connect('size-changed', () => {
             if (GLib.get_monotonic_time() / 1000 > until || this.tiles.has(win))
-                win.disconnect(id);
+                this._stopRecentring(win);
             else
                 this._centre(win);
-        });
+        }));
         this._raise(win);
+    }
+
+    /** End the size-changed handler _floatLate() gave a window. */
+    _stopRecentring(win) {
+        const id = this._recentring.get(win);
+        if (id === undefined)
+            return;
+        this._recentring.delete(win);
+        win.disconnect(id);
     }
 
     /** Put a window in the middle of the monitor it opens on. */
@@ -3818,12 +3795,11 @@ export class Tiling {
      * is freed twice once GJS collects it, which aborts the shell.
      *
      * Nor config.set_rect(): Mutter 51 reads the rectangle after GJS has
-     * freed it. Until 2026-11-22 the place was given with it, and what
-     * arrived was the memory of a freed rectangle: a new window was at
-     * x = 318107456, y = 21945 (the two halves of a heap address) with a
-     * size of its own, and was moved to its place 25 to 95 ms after it was
-     * shown. Firefox was told 3826 x 1440 and drew its first frame that
-     * size. The place is given as four numbers.
+     * freed it. What arrives is the memory of a freed rectangle: observed,
+     * a new window at x = 318107456, y = 21945 (the two halves of a heap
+     * address) with a size of its own, moved to its place 25 to 95 ms
+     * after it was shown, and Firefox told 3826 x 1440 and drawing its
+     * first frame that size. The place is given as four numbers.
      */
     _onConfigure(win, config) {
         try {
@@ -3853,9 +3829,8 @@ export class Tiling {
         }
     }
 
-    /** The next new window opens on this monitor. The launcher calls this. */
     /**
-     * The monitor the user is working on: where they last clicked, or the
+     * The active monitor: the one of the last click or touch, or the
      * monitor of the window that last took focus. New windows open there.
      */
     get activeMonitor() {
@@ -3864,7 +3839,7 @@ export class Tiling {
             ? this._activeMonitor : global.display.get_current_monitor();
     }
 
-    /** Make a monitor the one the user works on. For the hot corner of that monitor. */
+    /** Make a monitor the active one. For the hot corner of that monitor. */
     setActiveMonitor(monitor) {
         if (monitor >= 0 && monitor < global.display.get_n_monitors())
             this._activeMonitor = monitor;
@@ -3877,10 +3852,6 @@ export class Tiling {
      * monitor: no window has the focus ring, and every tile is drawn at
      * windows.unfocusedScale. The pressed monitor is the active one (set by
      * the caller), so the keys act on its strip.
-     *
-     * Until 2026-11-21 the press gave the focus to the window that last had
-     * it on the pressed monitor, and did nothing when the focused window
-     * was on that monitor.
      */
     _onDesktopPress(x, y, time) {
         if (Main.actionMode !== Shell.ActionMode.NORMAL)
@@ -3949,6 +3920,7 @@ export class Tiling {
         this._makeCurrent(null);
     }
 
+    /** The next new window opens on this monitor. The launcher calls this. */
     expectWindow(monitor, ms = EXPECT_WINDOW_MS) {
         this._expected = {monitor, until: GLib.get_monotonic_time() / 1000 + ms};
     }
@@ -3959,8 +3931,8 @@ export class Tiling {
             return;
         if (win.get_window_type() !== Meta.WindowType.NORMAL || win.get_transient_for())
             return;
-        // The launcher's monitor if it started this window, else the monitor
-        // the user is working on.
+        // The launcher's monitor if it started this window, else the active
+        // monitor.
         const e = this._expected;
         this._expected = null;
         const expected = e && GLib.get_monotonic_time() / 1000 <= e.until &&
@@ -4010,9 +3982,8 @@ export class Tiling {
      * layout.above: a window of one of these apps that is not on the strip
      * is set always on top. A tiled window that gets the focus is raised
      * over every floating one, and a prompt of 1Password (Quick Access, the
-     * request to use an SSH key) was then behind the columns, where nothing
-     * shows that it waits for an answer (the user, 2026-11-23: "1password
-     * can get hidden behind windows, it should be stuck on top").
+     * request to use an SSH key) would then be behind the columns, where
+     * nothing shows that it waits for an answer.
      *
      * A window that is on the strip, or about to be, is left alone: one
      * that is always on top never tiles.
@@ -4095,10 +4066,8 @@ export class Tiling {
         // after a swipe or a focus key. When it leaves or closes, the
         // windows that were over the fullscreen one before it return to
         // the places they had, see Strip._coverLeave and coverGone.
-        // Until 2026-11-22 only a swipe and a focus key kept this, and the
-        // window that stayed went to the left edge of the monitor (the
-        // user: "when i add 2 window while full screened and dismiss them
-        // it like moves to the left side").
+        // Without the scroll kept here, the window that stays would go to
+        // the left edge of the monitor.
         if (strip.cover && !win.is_fullscreen())
             tile.cameFrom = strip.scroll;
         if (apply && win.is_maximized?.()) {
@@ -4230,6 +4199,7 @@ export class Tiling {
         this.forced.delete(win);
         this._born.delete(win);
         this._home.delete(win);
+        this._stopRecentring(win);
         win.disconnectObject(this);
         if (next?.strip) {
             next.strip.focus = next;
@@ -4385,12 +4355,10 @@ export class Tiling {
             strip.focus = tile;
             tile.column.active = tile;
             // A new window is in the middle of the view, or as near to it
-            // as the ends of the strip allow (the user: "apps should always
-            // launch as centered as possible", and "if the windows wouldn't
-            // fit on a screen there should never be empty space"). Until
-            // 2026-11-22 the view scrolled the least distance that showed
-            // it, which put it at the right edge. Any other window that
-            // takes the focus is shown with the least scrolling.
+            // as the ends of the strip allow: the view shows no empty
+            // space past an end. The least scrolling that shows it would
+            // put it at the right edge. Any other window that takes the
+            // focus is shown with the least scrolling.
             if (tile.fresh && !tile.column.pending && this._isNew(win)) {
                 tile.fresh = false;
                 strip.place(tile.column, 'middle');
@@ -4438,11 +4406,11 @@ export class Tiling {
      * Draw a tile at full size and the others at windows.unfocusedScale.
      *
      * A press on a window that has no focus gives it the focus, and is also
-     * the start of a click in it. While the window grew from 98% to full
-     * size under the pointer, the release of that click landed up to 1% of
-     * the window's size away from the press: next to the button that was
-     * pressed, or far enough for the app to take the click as a drag. The
-     * window now grows when the button, or the finger, is released, so the
+     * the start of a click in it. If the window grew from 98% to full
+     * size under the pointer, the release of that click would land up to
+     * 1% of the window's size away from the press: next to the button that
+     * was pressed, or far enough for the app to take the click as a drag.
+     * The window grows when the button, or the finger, is released, so the
      * whole click is over a window that does not move.
      *
      * tile is null after a press on the desktop: no tile is current then.
@@ -4490,8 +4458,8 @@ export class Tiling {
      * tile through _onFocus(), which shrinks the one left behind. A
      * workspace with no window gives the focus to nothing, and _onFocus()
      * leaves the current tile alone then (the focus also goes to nothing
-     * while the launcher is open). So the window left behind lost its ring
-     * and slid away at full size (the user, 2026-11-22).
+     * while the launcher is open). Without this, the window left behind
+     * would lose its ring and slide away at full size.
      */
     _leaveCurrent() {
         const tile = this._currentPending ? this._wantCurrent : this.currentTile;
@@ -4506,11 +4474,9 @@ export class Tiling {
      * After a change of workspace, once Mutter has given the focus to a
      * window of the new one. It takes the window used last, and a window on
      * a monitor without workspaces is on every workspace. So a change to an
-     * empty workspace gave the focus to a window of the other monitor, and
-     * that monitor became the active one: the sidebar showed the new
-     * workspace and the other monitor both as current (the user,
-     * 2026-11-22: "there's like two active workspaces, it should just only
-     * focus the empty workspace").
+     * empty workspace gives the focus to a window of the other monitor,
+     * and that monitor would become the active one: the sidebar would show
+     * the new workspace and the other monitor both as current.
      *
      * The focus stays on the monitor the change was made on: with the
      * window that last had it there on the new workspace, or with none.
@@ -4624,8 +4590,8 @@ export class Tiling {
         // The shell has prepared its own animation of the maximize (a
         // double click on a title bar asks for one): 250 ms, with its own
         // easing, on the window actor. The focus ring and the other windows
-        // move on the springs, so the ring and the window were out of step.
-        // Without it the window changes size the way it does for the
+        // move on the springs, so the ring and the window would be out of
+        // step. Without it the window changes size the way it does for the
         // maximize-column key, which never starts that animation. Mutter
         // tells the shell about the maximize after it has told this
         // handler, so the animation is also dropped before the next frame.
@@ -4668,6 +4634,27 @@ export class Tiling {
             win.connectObject('position-changed', () => this._onDragMotion(), this.dropHint);
         } else {
             tile.holdResize(op);
+        }
+    }
+
+    /**
+     * A drag that is still going on when the tiling is disabled: no
+     * grab-op-end comes for it. The window is drawn whole again, and the
+     * icon that was dragged in its place over the sidebar goes.
+     */
+    _endDrag() {
+        const drag = this._drag;
+        this._drag = null;
+        if (!drag)
+            return;
+        drag.tile.win.disconnectObject(this.dropHint);
+        drag.icon?.destroy();
+        drag.icon = null;
+        const actor = drag.tile.actor;
+        if (drag.sunk && actor) {
+            actor.remove_all_transitions();
+            actor.set_scale(1, 1);
+            actor.opacity = 255;
         }
     }
 
@@ -4747,13 +4734,13 @@ export class Tiling {
      * The strip a dragged window lands on: the one of the monitor the
      * pointer is on, for the window's workspace.
      *
-     * Until 2026-11-21 it was the strip of the monitor the window was on,
-     * which Mutter takes from where most of the window is. A window held by
-     * the left end of its title bar is mostly to the right of the pointer.
-     * With the pointer near the right edge of one monitor, most of it was
-     * on the monitor to the right, and it landed there: the last place of
-     * the left monitor could only be reached by holding the window near its
-     * right end.
+     * Not the strip of the monitor the window is on, which Mutter takes
+     * from where most of the window is. A window held by the left end of
+     * its title bar is mostly to the right of the pointer. With the
+     * pointer near the right edge of one monitor, most of it is on the
+     * monitor to the right, and it would land there: the last place of
+     * the left monitor could only be reached by holding the window near
+     * its right end.
      *
      * pointer: false for a move with the keyboard, which leaves the pointer
      * where it was. The window's own monitor counts then.
@@ -5047,9 +5034,9 @@ export class Tiling {
      * either (Tile.opening). With two monitors, Ghostty's first frame is
      * 360 px wide at the right edge of the last monitor. Its second frame
      * is its place, which can be on another monitor, and Mutter reports
-     * that as a size change. The shell then drew the window flying from
-     * that edge to its place for 250 ms, with the ring already at the
-     * place.
+     * that as a size change. The shell would then draw the window flying
+     * from that edge to its place for 250 ms, with the ring already at
+     * the place.
      */
     _patchMapAnimation() {
         const wm = Main.wm;
@@ -5623,8 +5610,8 @@ export class Tiling {
      * left. After the last preset it shares the view again, as it did
      * before its width was set.
      *
-     * Until 2026-11-21 the presets were only the ratio between the columns,
-     * so the key did nothing to a window that was alone on its monitor.
+     * As only the ratio between the columns, the presets would do nothing
+     * to a window that is alone on its monitor.
      */
     _cycleFitWidth(tile, presets) {
         const col = tile.column;
@@ -5677,10 +5664,10 @@ export class Tiling {
      * of the view, at the right edge, or in the middle of it stays there,
      * and the columns beside it move.
      *
-     * Until 2026-11-21 the view scrolled the least distance that showed
-     * the column whole, which keeps its left edge. A column at the right
-     * edge that became narrower was then at neither edge, and a column in
-     * the middle was off the middle, or at the right edge when it grew.
+     * Scrolling the least distance that shows the column whole would keep
+     * its left edge. A column at the right edge that became narrower
+     * would then be at neither edge, and a column in the middle would be
+     * off the middle, or at the right edge when it grew.
      */
     _setProportion(tile, p) {
         const strip = tile.strip;
@@ -5699,8 +5686,7 @@ export class Tiling {
             // At none of the three places: the middle, as far as the strip
             // allows. That is where a new window is put when the middle
             // itself is past an end of the strip, so cycle-width keeps it
-            // there (the user: "super r should keep them centered"). A
-            // strip that does not scroll has no such place.
+            // there. A strip that does not scroll has no such place.
             if (strip.fits)
                 this._relayout(strip, tile);
             else
@@ -5721,13 +5707,8 @@ export class Tiling {
      * first and the last column have no neighbour on one side and stay at
      * that end of the strip: the view shows no empty space there.
      *
-     * Until 2026-11-22 such a column kept its left edge, since a column as
-     * wide as the view is at no single place in it (the user: "resizing
-     * from fullscreen currently aligns left, it should align middle by
-     * default"). Then, for some hours, the first and the last column went
-     * to the middle too, with empty space in place of a neighbour (the
-     * user: "since it's the rightmost window it shouldn't center like
-     * that").
+     * A column as wide as the view is at no single place in it (see
+     * Strip.anchorOf), so it has no edge to keep when it becomes narrower.
      */
     _layoutCentred(tile) {
         const strip = tile.strip;
@@ -5758,12 +5739,11 @@ export class Tiling {
      * that wide, and one that is becomes narrower again.
      *
      * Which of the two is read from the width the column has, within
-     * FULL_SLACK of the widest it can be. Until 2026-11-22 it was read
-     * from Column.restore, which only this key sets. A column made as wide
-     * as the view by hand, with the pointer or the width keys, had none,
-     * so the first press made it "as wide as the view" again, which
-     * changed nothing on the screen (the user: "the super + f keybind
-     * fails to un-fullscreen it, it should turn it to like 2/3").
+     * FULL_SLACK of the widest it can be, and not from Column.restore,
+     * which only this key sets. A column made as wide as the view by
+     * hand, with the pointer or the width keys, has none, so the first
+     * press would make it "as wide as the view" again, which changes
+     * nothing on the screen.
      *
      * Narrower is the width from before the key, when there is one and it
      * is narrower. Without one it is the widest of layout.presetWidths

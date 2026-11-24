@@ -8,15 +8,15 @@
 // that time, and the animation skips what it took:
 //   - the first frame lays the popup out and draws it,
 //   - St then recomputes the styles of every widget that was added, in an
-//     idle callback (st_widget_update_child_styles). That took 83 ms for the
-//     shortcuts sheet the first time, 20 ms the second and nothing after,
-//     because St keeps the styles it has computed,
+//     idle callback (st_widget_update_child_styles). That takes 83 ms for
+//     the shortcuts sheet the first time, 20 ms the second and nothing
+//     after, because St keeps the styles it has computed,
 //   - the frame after that lays the popup out again.
-// Measured on 2026-11-22 on a 144 Hz monitor with eight windows, the largest
-// step of the first opening against later ones, as a share of the whole
-// animation: launcher 20% against 11%, shortcuts 56% against 31%, downloads
-// 30% against 14%, calendar 27% against 9%, quick settings 39% against 10%.
-// That was seen as a first animation that is too fast.
+// Measured on a 144 Hz monitor with eight windows, the largest step of the
+// first opening against later ones, as a share of the whole animation:
+// launcher 20% against 11%, shortcuts 56% against 31%, downloads 30% against
+// 14%, calendar 27% against 9%, quick settings 39% against 10%. The first
+// animation then looks too fast.
 //
 // Here the transitions are paused at their first value. They start when a
 // frame of the actor's monitor has been drawn and the idle callbacks have
@@ -141,8 +141,8 @@ export function afterSettle(actor, start) {
  * that is removed or replaced before that is left alone.
  *
  * An actor that fades in from nothing is drawn at an opacity of 1 of 255
- * until then: at 0 it is not drawn at all, and the work of drawing it for
- * the first time would come with the second frame of its animation.
+ * while it waits: at 0 it is not drawn at all, and the work of drawing it
+ * for the first time would come with the second frame of its animation.
  */
 export function holdTransitions(actor, names) {
     if (!St.Settings.get().enable_animations)

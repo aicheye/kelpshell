@@ -56,9 +56,8 @@ export const SECTION_ICONS = {
  * recent is how many of the last used are shown.
  *
  * An emoticon takes as many of the six columns as its text needs
- * (GlyphGrid._span). For an hour on 2026-11-22 the page had two columns,
- * as wide as the longest emoticon, and ":-)" stood alone in 159 px (the
- * user: "why are the emoticons 2 wide").
+ * (GlyphGrid._span). With two columns as wide as the longest emoticon,
+ * ":-)" would stand alone in 159 px.
  */
 export const PAGES = {
     emoji: {columns: 8, cell: 38, recent: 16},

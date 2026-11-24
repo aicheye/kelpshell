@@ -12,9 +12,8 @@
 //   LID_CLOSE_SAFETY_TIMEOUT), which includes unplugging a dock.
 //
 // logind suspends at the end of that time when the lid is still closed. A
-// lid opened again before the end left the session open (the user,
-// 2026-11-23: six closes within a minute of unplugging the dock, one of
-// them locked).
+// lid opened again before the end leaves the session open: of six closes
+// within a minute of unplugging a dock, one locked.
 //
 // Here the lid itself locks, without an animation, as the shell does before
 // a suspend. The screen saver is then reported active at once and the power

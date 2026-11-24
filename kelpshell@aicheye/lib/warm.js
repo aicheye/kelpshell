@@ -1,36 +1,35 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The popups, drawn once after a login, before the user opens them.
+// The popups, drawn once after a login, before they are first opened.
 //
 // The first time a popup is shown the shell does work it never does again:
 // St matches the stylesheet against every widget in it, draws their
 // backgrounds and borders into textures, Pango shapes the text and the
 // glyphs are drawn into the glyph cache. The animations wait for that
 // (lib/settle.js), so they look the same every time, but the popup comes up
-// later. Measured 2026-11-22 on a 144 Hz monitor with eight windows, as the
-// time the shell ran nothing else right after the popup was asked for, the
-// first time against the later ones: launcher 35 ms against 0 to 17,
-// shortcuts 93 against 0, calendar 34 against 0 to 14, quick settings 49
-// against 0 (the user: "first interactions are more laggy").
+// later. Measured on a 144 Hz monitor with eight windows, as the time the
+// shell runs nothing else right after the popup is asked for, the first
+// time against the later ones: launcher 35 ms against 0 to 17, shortcuts 93
+// against 0, calendar 34 against 0 to 14, quick settings 49 against 0.
 //
 // Here each popup is shown once before that, for the two frames the work
 // takes, with a clip that has no area: nothing of it is drawn on the screen
 // (a screenshot taken meanwhile is the same as one taken before), and
 // nothing in it can be picked, so a click goes to the window under it. An
 // opacity of 0 would not do: an actor at 0 is not drawn at all. A
-// Clutter.Clone of the hidden popup, which draws it without showing it, did
+// Clutter.Clone of the hidden popup, which draws it without showing it, does
 // half of the work only: St computes the styles of what was added in an idle
 // callback, for widgets that are mapped, and a clone's source is mapped
 // only while it is drawn.
 //
-// Measured the same way after it, first time against later: launcher 16 ms
+// Measured the same way with it, first time against later: launcher 16 ms
 // against 0 to 10, shortcuts 31 against 0. What is left is the code of
 // open() running for the first time.
 //
 // One popup is shown at a time, when nothing has been pressed or moved for
-// IDLE_MS, so the 10 to 40 ms each takes do not fall into something the user
-// is doing. A popup the user has opened before its turn is left out, and one
-// the user opens during its turn is given back at once (endRehearsal).
+// IDLE_MS, so the 10 to 40 ms each takes do not delay input. A popup that
+// was opened before its turn is left out, and one that is opened during its
+// turn is given back at once (endRehearsal).
 //
 // St drops every style it has computed when the stylesheet changes, which a
 // change of the colour scheme does, and the styles of a card when its
@@ -43,7 +42,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // ms after the session has started before the first popup is drawn. The
-// shell and the apps that start with the session are busy until then.
+// shell and the apps that start with the session are busy for that time.
 const START_MS = 2000;
 // ms without input before a popup is drawn.
 const IDLE_MS = 400;
@@ -55,7 +54,7 @@ const LIMIT_MS = 500;
 // The popup that is shown now: {actor, end()}.
 let current = null;
 
-/** actor is about to be shown to the user: its turn here ends now. */
+/** actor is about to be opened on the screen: its turn here ends now. */
 export function endRehearsal(actor) {
     if (current?.actor === actor)
         current.end();
@@ -75,8 +74,8 @@ export class Rehearsal {
     /**
      * prepare(): gives the popup the content, the size and the place it has
      * when it is shown, without showing it, and returns {actor, isOpen()},
-     * or null when there is nothing to do. isOpen() tells whether the user
-     * has the popup open: it is then not hidden again at the end. With
+     * or null when there is nothing to do. isOpen() tells whether the popup
+     * has been opened meanwhile: it is then not hidden again at the end. With
      * inner, an actor inside actor that is hidden too while the popup is
      * closed: it is shown and hidden with it.
      */
@@ -163,7 +162,7 @@ export class Rehearsal {
             console.warn(`kelpshell: rehearsal, ${name}: ${e.message}`);
         }
         const actor = popup?.actor;
-        // Shown already: the user was faster. A clip of its own is left alone.
+        // Shown already: it was opened first. A clip of its own is left alone.
         if (!actor || actor.visible || actor.has_clip || !actor.get_stage()) {
             this._later(PAUSE_MS, () => this._next());
             return;

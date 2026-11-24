@@ -7,8 +7,8 @@
 // then the shell reports the screen saver as active. gnome-settings-daemon
 // turns the display off the moment it hears that (handle_screensaver_active
 // in its power plugin, with no setting for it). A key pressed after a lock
-// met the fade to black or a display that was switching off, and the lock
-// screen came back at once (the user, 2026-11-22).
+// then meets the fade to black or a display that is switching off, and the
+// lock screen comes back at once.
 //
 // Here a lock leaves the lock screen on the screen, and the fade to black
 // and the report follow when nothing was pressed or moved for BLANK_AFTER
@@ -26,7 +26,7 @@
 //
 // Until the report, org.gnome.ScreenSaver says "not active" on D-Bus while
 // the session is locked. The lock itself is reported to logind (LockedHint)
-// at once, as before.
+// at once.
 //
 // This runs for as long as the extension is enabled, in the session and on
 // the lock screen: the lock starts in the session.

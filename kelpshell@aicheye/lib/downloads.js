@@ -22,8 +22,7 @@
 // With the sidebar collapsed the pile spreads too, into one column straight
 // up: the cards are 52 px wide there, which is room for one file. The files
 // are smaller (36 px, 46 px under the pointer) and less turned, and
-// everything else is the same. Until 2026-11-21 the collapsed pile did not
-// spread: it showed the name of its top file and a click opened the grid.
+// everything else is the same.
 //
 // The folder is XDG_DOWNLOAD_DIR, or sidebar.downloadsDir. It is watched,
 // and a file that arrives grows in on top of the pile while the whole pile
@@ -41,26 +40,16 @@
 // thumbnailer the system has for its type, as the file manager does it
 // (DownloadsCard._thumbnail).
 //
-// Until 2026-11-23 no thumbnail was made here. A PDF then showed the icon of
-// its type from the moment it was downloaded: the file manager makes the
-// thumbnail when it shows the folder, and nothing changes in the downloads
-// folder at that time, so the pile was not drawn again either (the user:
-// "pdf download thumbnails aren't loading even though they show in the
-// downloads folder").
+// The thumbnail is made here because the file manager makes one only when
+// it shows the folder. Left to that, a PDF would show the icon of its type
+// from the moment it is downloaded, and nothing changes in the downloads
+// folder when the file manager writes the thumbnail, so the pile would not
+// be drawn again then either.
 //
-// History, all of 2026-11-21:
-//
-//   - The pile was inside a card, and nothing could be dragged out of it.
-//   - The pile spread out into a row of four files and the folder, which
-//     left 35 px for each in the 164 px of the sidebar. Then it rose into
-//     one column of five, 256 px straight up from the pile.
-//   - After the grid had been opened and closed, the row stayed open with
-//     the pointer somewhere else. The grid takes the pointer with a grab,
-//     and the pile and the file that was clicked are sent no leave event,
-//     so St kept their hover set. The card now clears it (_dropHover).
-//   - The pile spread out into two upright columns of three, the folder at
-//     the top right. Files of different shapes in a grid looked uneven, and
-//     the folder weighed on one side.
+// The spread pile is not a row or a grid. A row of four files and the
+// folder leaves 35 px for each in the 164 px of the sidebar. In two upright
+// columns of three with the folder at the top right, files of different
+// shapes look uneven and the folder weighs on one side.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -315,8 +304,8 @@ class KelpPile extends St.Widget {
                 mode: Clutter.AnimationMode.EASE_OUT_BACK,
             });
             // Not with EASE_OUT_BACK: that goes past 255, which the opacity
-            // takes as a small number, and the file was gone for 150 ms in
-            // the middle of growing in (measured 2026-11-21).
+            // takes as a small number, and the file is gone for 150 ms in
+            // the middle of growing in (measured).
             button.ease({
                 opacity,
                 duration: ARRIVE_MS / 2,
@@ -538,12 +527,9 @@ class Tip {
 
     /**
      * box: the file on the stage, {x, y, width, height}. The name is to its
-     * right, TIP_GAP from it, level with its middle.
-     *
-     * Until 2026-11-22 the name moved up or down, as far as the top and the
-     * bottom of its file, to cover less of the file beside it. In the
-     * user's picture it stood 14 px over the middle of its file ("this
-     * label isn't aligned").
+     * right, TIP_GAP from it, level with its middle. It is not moved up or
+     * down to cover less of the file beside it: it has to stay level with
+     * its own file.
      */
     show(text, box) {
         const monitor = Main.layoutManager.primaryMonitor;
@@ -554,9 +540,9 @@ class Tip {
         this.actor.set_width(-1);
         // Shown before it is measured. A label that has never been shown
         // has no style yet and is measured in the font of the shell: the
-        // first name after a login was 135 x 33 px where it is 110 x 25,
-        // so it was placed for a size it did not have (measured
-        // 2026-11-22). It is see-through until the fade below.
+        // first name after a login is then 135 x 33 px where it is
+        // 110 x 25 (measured), and would be placed for a size it does not
+        // have. It is see-through until the fade below.
         this.actor.show();
         const [, width] = this.actor.get_preferred_width(-1);
         const [, height] = this.actor.get_preferred_height(-1);
@@ -660,8 +646,8 @@ class Popup {
         this._overlay.reactive = true;
         this._anchor = this._card.anchor();
         // Shown before it is placed. Hidden, the grid reports a height of
-        // 0 until it has been shown once, so the first time it opened 95 px
-        // lower than every time after (seen on 2026-11-21).
+        // 0 until it has been shown once, so the first time it would open
+        // 95 px lower than every time after.
         this._overlay.show();
         this._place();
         this._overlay.grab_key_focus();
@@ -775,9 +761,9 @@ class Popup {
             // dragged over, so it closes when a drag starts.
             //
             // The picture starts over the tile's icon, which has its size.
-            // Until 2026-11-21 it started at the top left corner of the
-            // tile, 24 px left of and 10 px over the icon, so it jumped by
-            // that much from under the pointer.
+            // Started at the top left corner of the tile, 24 px left of and
+            // 10 px over the icon, it would jump by that much from under
+            // the pointer.
             makeFileDraggable(tile, {
                 file: item.file,
                 source: icon,
@@ -866,6 +852,8 @@ export class DownloadsCard {
     }
 
     destroy() {
+        // Thumbnails, drags and D-Bus calls can still end after this.
+        this._destroyed = true;
         this._unwatch();
         this._popup.destroy();
         this._tip.destroy();
@@ -926,6 +914,8 @@ export class DownloadsCard {
     }
 
     _scanSoon() {
+        if (this._destroyed)
+            return;
         if (this._scanId)
             GLib.source_remove(this._scanId);
         this._scanId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, RESCAN_MS, () => {
@@ -1068,6 +1058,8 @@ export class DownloadsCard {
             },
             end: () => {
                 this._dragging = false;
+                if (this._destroyed)
+                    return;
                 if (this._stale) {
                     this._stale = false;
                     this._show([]);
@@ -1114,6 +1106,10 @@ export class DownloadsCard {
      * drawn as the file under the pointer is: the grid came from it.
      */
     _syncSpread() {
+        // The pile reports the end of its hover when the sidebar is taken
+        // off the stage, after destroy().
+        if (this._destroyed)
+            return;
         const open = this._popup?.isOpen;
         const spread = open || (this._pile.hover && !this._dragging);
         this._pile.setSpread(spread);
@@ -1140,9 +1136,9 @@ export class DownloadsCard {
 
     /**
      * The grid has taken the pointer. The pile and its files are sent no
-     * leave event, so their hover is cleared here. The pile stays spread.
-     * Until 2026-11-21 it closed, and the folder that had been clicked was
-     * gone while its grid was open.
+     * leave event, so their hover is cleared here. The pile stays spread:
+     * if it closed, the folder that was clicked would be gone while its
+     * grid is open.
      */
     grabbed() {
         for (const button of this._pile.buttons)
@@ -1204,15 +1200,13 @@ export class DownloadsCard {
      * The file under the pointer is drawn larger and named.
      *
      * Not while the pile spreads. The files leave the pile one after the
-     * other and cross what is over it on the way, so a pointer that came
-     * to the pile was on a file that was passing: its name came up at the
-     * place it was going to, up to 166 px from the pointer, for 30 to
-     * 100 ms, and then the name of the next one (measured 2026-11-22; the
-     * user: "when i open the download stack for the first time the tooltip
-     * is on the wrong item"). A file that is not shown in the lying pile
-     * was among them: it becomes reactive at the start, in the middle of
-     * the pile. The file the pointer is on once they are in their places
-     * is named then, see _syncLanded().
+     * other and cross what is over it on the way, so a pointer that comes
+     * to the pile is on a file that is passing: its name would come up at
+     * the place it is going to, up to 166 px from the pointer, for 30 to
+     * 100 ms, and then the name of the next one (measured). A file that is
+     * not shown in the lying pile is among them: it becomes reactive at
+     * the start, in the middle of the pile. The file the pointer is on
+     * once they are in their places is named then, see _syncLanded().
      *
      * A file can report the pointer before the pile does, because the
      * event goes to the file first. The pile is not spread at that moment
@@ -1227,9 +1221,9 @@ export class DownloadsCard {
             // or off the pile, which closes it.
             return;
         }
-        // Next to the file. Until 2026-11-22 the name was next to the
-        // sidebar, so that it never lay on a file of the other side: up to
-        // 83px from a file on the left, which read as belonging to nothing.
+        // Next to the file, and not next to the sidebar, where it would
+        // never lie on a file of the other side: that is up to 83px from a
+        // file on the left, and reads as belonging to nothing.
         this._pile.setHovered(button);
         const s = scaleFactor();
         const file = this._pile.restBox(button);
@@ -1282,7 +1276,8 @@ export class DownloadsCard {
                     bus.call_finish(result);
                 } catch {
                     // No file manager answers: open the folder.
-                    this.open(file.get_parent() ?? this.dir);
+                    if (!this._destroyed)
+                        this.open(file.get_parent() ?? this.dir);
                 }
             });
     }

@@ -7,10 +7,9 @@
 //
 // All of them are built from one class of the shell, Dialog in ui/dialog.js:
 // a box with the style class "modal-dialog" that holds the content and the
-// row of buttons. Until 2026-11-23 they were drawn as the shell theme has
-// them, a grey box (#36363a) over a dark vignette, next to the cards of the
-// sidebar and the launcher (the user: "some prompts are not in the kelpshell
-// style").
+// row of buttons. The shell theme draws them as a grey box (#36363a) over a
+// dark vignette, which does not go with the cards of the sidebar and the
+// launcher.
 //
 // Here the box of every prompt moves into a wrapper that draws the card
 // material and the shadow under it, as lib/tweaks.js does for the calendar

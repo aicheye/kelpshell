@@ -22,8 +22,9 @@ import GLib from 'gi://GLib';
 
 import * as ShellConfig from 'resource:///org/gnome/shell/misc/config.js';
 
-// The module stays in the shell once loaded, so these outlive the extension
-// being disabled and enabled, as it is on every lock of the screen.
+// The module stays in the shell once loaded, so these outlive this part of
+// the extension being disabled and enabled, as it is on every lock of the
+// screen.
 let loaded = false;
 // The windows that were open when the module was loaded, by id. Their
 // clients had drawn their frames already.

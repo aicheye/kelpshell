@@ -55,11 +55,12 @@ function label(text, styleClass, props = {}) {
 }
 
 // The box the cards are in. Their shadows reach 14 px past them, which is
-// 4 px into the first column of windows, so every frame a window there drew
-// also drew the 242 actors of the sidebar: 13 ms in each second at 60 frames
-// (measured 2026-11-22). The box draws nothing from setEdge() on, and
-// reports no paint volume past it. St looks at no clip for that volume but
-// clip_to_allocation, which would cut the shadows off at the cards.
+// 4 px into the first column of windows. With a paint volume that wide,
+// every frame a window there draws also draws the 242 actors of the
+// sidebar: 13 ms in each second at 60 frames (measured). The box draws
+// nothing from setEdge() on, and reports no paint volume past it. St looks
+// at no clip for that volume but clip_to_allocation, which would cut the
+// shadows off at the cards.
 const SidebarBox = GObject.registerClass(
 class KelpSidebarBox extends St.BoxLayout {
     /** edge: the x in the box's own units from which nothing is drawn, null for no cut. */
@@ -165,15 +166,11 @@ const Reveal = GObject.registerClass({
 // the card (above). What is under it moves up as it closes, and the card
 // gets shorter from below.
 //
-// Until 2026-11-22 the system card was shown and hidden in one frame, and
-// the downloads pile over it moved by the card's height in that frame (the
-// user: "the way the cpu stats instantly disappear and appear is not
-// pleasing animate it"). After that the card kept its height, moved down
-// with the top of the slot and was cut off at the slot's lower edge (the
-// user: "it should shrink down instead of sliding down"). The media card
-// and the notifications card were shown and hidden in one frame until
-// then too (the user: "same thing for the now playing should shrink
-// rather than disappearing").
+// Shown or hidden in one frame, the system card would move the downloads
+// pile over it by the card's height in that frame. A card that kept its
+// height and moved with the top of the slot would slide down and be cut
+// off at the slot's lower edge: a card is to get shorter where it is. The
+// media card and the notifications card are in such slots too.
 const CardSlot = GObject.registerClass({
     Properties: {
         'share': GObject.ParamSpec.double('share', 'share', 'share',
@@ -347,29 +344,17 @@ const FullHeight = GObject.registerClass({
     }
 });
 
-// A bar with a fill over the left `fraction` of its width: how far a track
-// has played, and the meters of the system card. The fill is placed when
-// the bar is laid out.
-//
-// Until 2026-11-21 the fill was given a width, the bar's width times the
-// fraction, each time a value was read. An actor that waits for a layout
-// reports its natural width, and for such a bar that was the width of the
-// fill. The cards are hidden over a fullscreen window and are not laid out
-// there, so with each reading the fill became its own width times the
-// fraction, down to nothing. When the cards came back the bar was empty
-// until the next reading, and then jumped to its value.
 // A row of the minimap that takes the height of what is in it over ROW_MS,
 // from the height the row before it had.
 //
 // The rows are built again each time a window, the focus or the workspace
 // changes. The active workspace has larger icons and a line for a title, so
-// a change of workspace made one row lower and another higher in one frame,
-// and the card with them (the user, 2026-11-22: "the height of the
-// workspace card like snaps").
+// without this a change of workspace would make one row lower and another
+// higher in one frame, and the card with them.
 //
 // grow goes from 0, the height given to growFrom(), to 1, the height of the
-// content. Until then the content has its own height from the top of the
-// row and is cut at the row's lower edge.
+// content. While it is under 1 the content has its own height from the top
+// of the row and is cut at the row's lower edge.
 const ROW_MS = 200;
 
 const EaseRow = GObject.registerClass({
@@ -409,9 +394,9 @@ const EaseRow = GObject.registerClass({
         const [min, nat] = super.vfunc_get_preferred_height(forWidth);
         if (this.grow >= 1)
             return [min, nat];
-        // Not rounded: two rows that change at once, one up and one down,
-        // rounded each for itself made their sum, the height of the card,
-        // go up and down by a pixel.
+        // Not rounded: with two rows that change at once, one up and one
+        // down, each rounded for itself, their sum, the height of the card,
+        // would go up and down by a pixel.
         const height = this._from + (nat - this._from) * this.grow;
         return [height, height];
     }
@@ -467,11 +452,9 @@ const EaseList = GObject.registerClass({
 // the icon of the focused window. Each is one actor that moves to its new
 // place over ROW_MS when the workspace or the focus changes.
 //
-// Until 2026-11-23 the fills were the backgrounds of the row and of the icon
-// themselves. The rows are built again at every change, so the fill was gone
-// from one place and there at another in one frame (the user: "the
-// 'workspace' highlight and window highlight should be animated when they
-// move too").
+// The fills are not the backgrounds of the row and of the icon themselves.
+// The rows are built again at every change, so such a fill would be gone
+// from one place and there at another in one frame.
 //
 // A mark has the place of its target, an actor of the list, which
 // MarkedList reads at every layout. While it moves, its place is between the
@@ -594,6 +577,17 @@ class KelpMarkedList extends St.Viewport {
     }
 });
 
+// A bar with a fill over the left `fraction` of its width: how far a track
+// has played, and the meters of the system card. The fill is placed when
+// the bar is laid out.
+//
+// The fill is not given a width, the bar's width times the fraction, each
+// time a value is read. An actor that waits for a layout reports its
+// natural width, and for such a bar that is the width of the fill. The
+// cards are hidden over a fullscreen window and are not laid out there, so
+// with each reading the fill would become its own width times the fraction,
+// down to nothing. When the cards come back the bar would be empty until
+// the next reading, and then jump to its value.
 const FillBar = GObject.registerClass(
 class KelpFillBar extends St.Widget {
     _init(fillClass, props) {
@@ -633,8 +627,9 @@ class KelpFillBar extends St.Widget {
 // `ahead` returns the px the container is still going to grow by. While the
 // sidebar widens from its collapsed width, the lines are those of the final
 // width, and the children that do not fit yet are past the right edge. With
-// the lines of the current width every icon had a line of its own at first,
-// and the card was several times its final height for the first frames.
+// the lines of the current width every icon would have a line of its own at
+// first, and the card would be several times its final height for the first
+// frames.
 const WrapLayout = GObject.registerClass(
 class KelpWrapLayout extends Clutter.LayoutManager {
     _init(spacing, ahead = null) {
@@ -722,20 +717,22 @@ class ClockCard {
         this._weekKey = '';
         // The collapsed style goes at once when the sidebar expands, and
         // the card widens over COLLAPSE_MS. For its first four frames the
-        // card is narrower than the time at its large size (68 px), and
-        // the label showed an ellipsis there, which was seen as a flash.
-        // The text is not shortened now. It is cut off at the edge of the
-        // card instead, and shows as the card widens. The date does not
-        // wrap either: it broke as "Saturd-" on the first frame.
+        // card is narrower than the time at its large size (68 px), and a
+        // label that shortens its text would show an ellipsis there, which
+        // is seen as a flash. So the text is not shortened. It is cut off
+        // at the edge of the card, and shows as the card widens. The date
+        // does not wrap either: it would break as "Saturd-" on the first
+        // frame.
         for (const text of [this._time, this._ampm, this._date])
             text.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         this._date.clutter_text.line_wrap = false;
         // The markup of the collapsed time, see _update(). It is set again
-        // once the label has given its text the font of a new style: the
-        // text was laid out without the line height of the markup after
-        // every style change, until the next minute set the markup again.
-        // The collapsed card was 92 px high for that time and 81 px after
-        // it, and every card under it moved up by 11 px with the minute.
+        // once the label has given its text the font of a new style.
+        // Without that the text is laid out without the line height of the
+        // markup after every style change, until the next minute sets the
+        // markup again: the collapsed card is 92 px high for that time and
+        // 81 px after it, and every card under it moves up by 11 px with
+        // the minute.
         this._stacked = null;
         this._time.connect_after('style-changed', () => {
             if (this._collapsed && this._stacked)
@@ -956,6 +953,7 @@ class Minimap {
         this._tracker = Shell.WindowTracker.get_default();
         this._signature = '';
         this._scrollAcc = 0;
+        this._iconGeometry = new Set();   // windows given a rectangle to minimize to
 
         this._rows = new EaseList({
             orientation: VERTICAL,
@@ -1014,8 +1012,8 @@ class Minimap {
 
     queueRebuild() {
         // The tiling still reports changes while the shell ends, after the
-        // sidebar is gone: three logouts of 2026-11-23 each logged "has
-        // been already disposed" for the rows built again then.
+        // sidebar is gone. Rows built again then are logged as "has been
+        // already disposed".
         if (this._idleId || this._destroyed)
             return;
         this._idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -1454,6 +1452,7 @@ class Minimap {
         // of the monitor.
         const [x, y] = cell.get_transformed_position();
         const [width, height] = cell.get_transformed_size();
+        this._iconGeometry.add(win);
         win.set_icon_geometry(new Mtk.Rectangle({
             x: Math.round(x), y: Math.round(y),
             width: Math.round(width), height: Math.round(height),
@@ -1495,8 +1494,8 @@ class Minimap {
         });
         cell.track_hover = true;
 
-        // The dragged icon is 36px for every row, the size it had when a
-        // row with titles had 24px icons.
+        // The dragged icon is DRAG_ICON px for every row, whatever the size
+        // of the icons in the row.
         cell._delegate = {
             metaWindow: win,
             getDragActor: () => app
@@ -1511,6 +1510,9 @@ class Minimap {
         });
         draggable.connect('drag-end', () => {
             this._dragging = false;
+            // The shell ends a drag after the sidebar has gone, too.
+            if (this._destroyed)
+                return;
             this._setDropRow(null);
             this._showInsert(null);
             if (this._pending) {
@@ -1656,7 +1658,7 @@ class Minimap {
 
     _queuePreview(win, cell) {
         this._cancelPreviewTimer();
-        if (this._dragging)
+        if (this._dragging || this._destroyed)
             return;
         const delay = this._preview.actor.visible
             ? 40 : this._sidebar.config.values.sidebar.previewDelay;
@@ -1676,7 +1678,10 @@ class Minimap {
 
     _hidePreview() {
         this._cancelPreviewTimer();
-        this._preview.hide();
+        // An icon under the pointer reports the end of its hover when the
+        // sidebar is taken off the stage, after destroy().
+        if (!this._destroyed)
+            this._preview.hide();
     }
 
     destroy() {
@@ -1687,6 +1692,14 @@ class Minimap {
         this._idleId = 0;
         this._insert?.destroy();
         this._insert = null;
+        this._dropRow = null;
+        // The windows minimize to the shell's own place again.
+        const live = new Set(global.display.list_all_windows());
+        for (const win of this._iconGeometry) {
+            if (live.has(win))
+                win.set_icon_geometry(null);
+        }
+        this._iconGeometry.clear();
         Main.layoutManager.disconnectObject(this);
         this._preview.destroy();
     }
@@ -1743,12 +1756,10 @@ class MediaCard {
         //
         // With no position to show the bar has no height, and the card is
         // 12 px lower: the bar opens and closes over BAR_MS, and the card
-        // follows it. Until 2026-11-22 the bar kept its place and was drawn
-        // transparent, because a browser reports no length between two
-        // videos and a bar that was hidden changed the height of the card
-        // in one frame each time. For that case the bar now waits
-        // BAR_CLOSE_MS before it closes, and does not close when a position
-        // is back by then.
+        // follows it. A browser reports no length between two videos, and
+        // a bar that closed at once would change the height of the card
+        // each time. So the bar waits BAR_CLOSE_MS before it closes, and
+        // does not close when a position is back by then.
         this._progress = new FillBar('kelp-media-progress-fill', {
             style_class: 'kelp-media-progress',
             x_expand: true,
@@ -1846,10 +1857,9 @@ class MediaCard {
      * none playing it stays with the player it showed, so that one can be
      * started again from here.
      *
-     * Until 2026-11-21 a player whose window had the focus was left out, on
-     * the grounds that its window shows the track already. The card then
-     * changed player with the focus, and showed a paused player while the
-     * focused one played.
+     * A player whose window has the focus is not left out, though its
+     * window shows the track already. The card would change player with
+     * the focus, and show a paused player while the focused one plays.
      */
     _pick() {
         const all = this._source.players;
@@ -2007,9 +2017,10 @@ class MediaCard {
     /**
      * A cover at a web address, as Spotify sends. It is saved to the cache
      * directory and shown from there. The stylesheet reads a background
-     * image while the shell waits: with a web address the shell stopped for
-     * the time of the download, 2167 ms with a server that answers after 2 s.
-     * The cover of the last track stays until the new one is there.
+     * image while the shell waits: with a web address the shell would stop
+     * for the time of the download (2167 ms measured with a server that
+     * answers after 2 s). The cover of the last track stays until the new
+     * one is there.
      */
     _fetchCover(url) {
         const cancellable = new Gio.Cancellable();
@@ -2269,6 +2280,7 @@ function formatRate(bytesPerSecond) {
 class SystemCard {
     constructor(sidebar) {
         this._sidebar = sidebar;
+        this._cancellable = new Gio.Cancellable();   // the disk space question, see _tickDisk
         this._cpu = new Meter('CPU', 'cpu');
         this._mem = new Meter('RAM', 'mem');
         this._disk = new Meter('DISK', 'disk');
@@ -2346,16 +2358,22 @@ class SystemCard {
             this._mem.set(1 - available / total);
     }
 
+    /** Asked off the main loop: a home on a network mount can take long to answer. */
     _tickDisk() {
-        try {
-            const info = Gio.File.new_for_path(GLib.get_home_dir()).query_filesystem_info(
-                'filesystem::size,filesystem::free', null);
-            const size = info.get_attribute_uint64('filesystem::size');
-            const free = info.get_attribute_uint64('filesystem::free');
-            if (size > 0)
-                this._disk.set(1 - free / size);
-        } catch {
-        }
+        Gio.File.new_for_path(GLib.get_home_dir()).query_filesystem_info_async(
+            'filesystem::size,filesystem::free', GLib.PRIORITY_LOW, this._cancellable,
+            (file, result) => {
+                try {
+                    const info = file.query_filesystem_info_finish(result);
+                    const size = info.get_attribute_uint64('filesystem::size');
+                    const free = info.get_attribute_uint64('filesystem::free');
+                    if (size > 0 && !this._cancellable.is_cancelled())
+                        this._disk.set(1 - free / size);
+                } catch {
+                    // Cancelled, or the filesystem gave no answer: the
+                    // meter keeps its last value.
+                }
+            });
     }
 
     /** Fraction of a logarithmic bar from 1 KB/s to 1 GB/s. */
@@ -2437,6 +2455,7 @@ class SystemCard {
         if (this._timerId)
             GLib.source_remove(this._timerId);
         this._timerId = 0;
+        this._cancellable.cancel();
     }
 }
 
@@ -3011,8 +3030,8 @@ class OutputMenu {
     /**
      * Add the devices that were there before this was made: those in the
      * shell's own menu, which has followed the signals since the shell
-     * started, and the device of every stream. In one test run of 2026-11-22
-     * the shell's menu was empty while five streams were there.
+     * started, and the device of every stream. The shell's menu alone is
+     * not enough: it has been seen empty while five streams were there.
      */
     _known() {
         const shell = Main.panel.statusArea.quickSettings?._volumeOutput?._output?._deviceItems;
@@ -3064,8 +3083,8 @@ class OutputMenu {
                 continue;
             const [name, origin] = outputNames(device, control.get_stream_from_device(device));
             // x_expand on the box itself: with it only on a label inside,
-            // the box of a row did not take the width of the button, and the
-            // row was drawn in its middle (2026-11-22).
+            // the box of a row does not take the width of the button, and
+            // the row is drawn in its middle.
             const row = new St.BoxLayout({style_class: 'kelp-output-row-box', x_expand: true});
             row.add_child(new St.Icon({gicon: outputGicon(device), style_class: 'kelp-icon'}));
             // One of the two labels takes the room that is left, so the
@@ -3276,9 +3295,9 @@ export class Sidebar {
     /**
      * state: what the sidebar was like before a lock of the screen, see
      * the state getter. The key and the button collapse it without
-     * writing the configuration, so the sidebar came back from every lock
-     * as the configuration has it, and the windows changed their width
-     * for it.
+     * writing the configuration, so without the state the sidebar would
+     * come back from every lock as the configuration has it, and the
+     * windows would change their width for it.
      */
     enable(state = null) {
         this.collapsed = state?.collapsed ?? this.config.values.sidebar.collapsed;
@@ -3316,13 +3335,13 @@ export class Sidebar {
         // and drawn in their other style (settle.js). No later frame moves
         // it on by more than COLLAPSE_STEP_FRAMES frames of the monitor.
         //
-        // Until 2026-11-22 this was a Clutter transition, which runs on
-        // the clock. The first collapse after a login is slower than the
-        // later ones (styles and icon sizes that were never used before):
-        // with eight windows on two monitors its first frame took 17 ms
-        // and the third came 31 ms after the second. The transition was
+        // It is not a Clutter transition, which runs on the clock. The
+        // first collapse after a login is slower than the later ones
+        // (styles and icon sizes that were never used before): with eight
+        // windows on two monitors its first frame takes 17 ms and the third
+        // comes 31 ms after the second (measured). A transition is then
         // 56% of the way by the third frame, against 36% on a later
-        // collapse, which was seen as a collapse that was too fast.
+        // collapse, which is seen as a collapse that is too fast.
         this._widening = null;
         this._widthItem = {
             tick: dt => {
@@ -3546,9 +3565,8 @@ export class Sidebar {
     /**
      * The system card is hidden while the downloads pile has no room to
      * spread: the pile then lies lower by the height of that card, and
-     * spreads into the room that gives. Without this the spread pile lay
-     * on the card above it (seen on 2026-11-21 with a notification
-     * showing).
+     * spreads into the room that gives. Without this the spread pile lies
+     * on the card above it, for example with a notification showing.
      *
      * The room is always the one there would be with the system card
      * shown, so the card does not come back into room that only its own
@@ -3754,9 +3772,8 @@ export class Sidebar {
      * up to the place they have with no fullscreen window, and stop there.
      * peekStay() leaves them there, peekEnd() sends them back out.
      *
-     * Until 2026-11-21 a pull further than their width moved them on by up
-     * to a quarter of it, so the margin left of the cards was wider than the
-     * one above them.
+     * A pull further than their width does not move them on: the margin
+     * left of the cards would be wider than the one above them.
      */
     peekUpdate(px) {
         const actor = this.actor;
@@ -3787,12 +3804,8 @@ export class Sidebar {
 
     /**
      * The fingers lifted after a swipe that brought the cards in: they go
-     * on to their place and stay there, until peekEnd().
-     *
-     * From 2026-11-21 to 2026-11-22 they sprang back out when the fingers
-     * lifted, and after a focus key when its modifier keys were released
-     * (the user: "the sidebar should not actually automatically slide
-     * out, it should stay until you slide it out").
+     * on to their place and stay there, until peekEnd(). They do not go
+     * back out by themselves when the fingers lift.
      */
     peekStay(velocity = 0) {
         if (!this.actor || !this._covered || !this._peek)

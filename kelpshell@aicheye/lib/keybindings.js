@@ -24,8 +24,8 @@ const SCHEMAS = [
     // The emoji typing of IBus is on Super+period and Super+semicolon. IBus
     // is given the keys of a window with a text field before Mutter looks
     // at its own shortcuts, so a combo left here never reaches the
-    // extension while a text field has the focus (seen 2026-11-22 with
-    // Super+period for the picker: the accelerator was held and never ran).
+    // extension while a text field has the focus: with Super+period for
+    // the picker, the accelerator is held and never runs.
     'org.freedesktop.ibus.panel.emoji',
 ];
 
@@ -167,9 +167,16 @@ export class Keybindings {
         }
         if (changes.length === 0)
             return;
-        // Write the backup before touching anything.
-        GLib.mkdir_with_parents(GLib.path_get_dirname(this._backupPath), 0o755);
-        GLib.file_set_contents(this._backupPath, JSON.stringify(backup, null, 2));
+        // Write the backup before touching anything. Shortcuts that cannot
+        // be put back later are left with the apps that have them.
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._backupPath), 0o755);
+            GLib.file_set_contents(this._backupPath, JSON.stringify(backup, null, 2));
+        } catch (e) {
+            console.warn('kelpshell: conflicting shortcuts left unchanged, ' +
+                `no backup at ${this._backupPath}: ${e.message}`);
+            return;
+        }
         for (const change of changes)
             change();
         Gio.Settings.sync();
@@ -186,18 +193,23 @@ export class Keybindings {
             return;
         }
         const source = Gio.SettingsSchemaSource.get_default();
-        for (const [id, keys] of Object.entries(backup)) {
+        const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+        for (const [id, keys] of Object.entries(isObject(backup) ? backup : {})) {
             const schema = source.lookup(id, true);
-            if (!schema)
+            if (!schema || !isObject(keys))
                 continue;
             const settings = new Gio.Settings({settings_schema: schema});
             for (const [key, saved] of Object.entries(keys)) {
-                if (!schema.has_key(key))
+                if (!schema.has_key(key) || !isObject(saved))
                     continue;
-                if (saved.user)
-                    settings.set_strv(key, saved.value);
-                else
-                    settings.reset(key);
+                try {
+                    if (saved.user && Array.isArray(saved.value))
+                        settings.set_strv(key, saved.value.map(String));
+                    else
+                        settings.reset(key);
+                } catch (e) {
+                    console.warn(`kelpshell: cannot restore ${id} ${key}: ${e.message}`);
+                }
             }
         }
         Gio.Settings.sync();

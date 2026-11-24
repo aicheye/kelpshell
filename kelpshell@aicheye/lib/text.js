@@ -8,8 +8,8 @@ import Pango from 'gi://Pango';
  * Keep a one-line label at the height, and on the baseline, of text in its
  * own font. Pango takes the glyphs a font lacks from other fonts: CJK,
  * Arabic, some symbols. Those fonts have taller lines. A title with such a
- * glyph made its label a few pixels taller and moved the text down, and
- * everything laid out around the label moved with it.
+ * glyph makes its label a few pixels taller and moves the text down, and
+ * everything laid out around the label moves with it.
  *
  * The text actor gets the height of a Latin line in its font, and is moved
  * so its baseline is where that line has it. Wrapping is on together with
@@ -30,12 +30,12 @@ export function steadyLine(label) {
         // the display, with a scale attribute. The reference line is a copy
         // of the actor's own layout with other text, so it has that
         // attribute and the font, and the two baselines are in the same
-        // pixels whatever the scale is. Until 2026-11-21 the reference was
-        // given the scale that text.get_resource_scale() returned. For an
-        // actor that is not shown that can be 1 while its layout is at 2,
-        // and the text was then moved up by one whole baseline: the
-        // "Notifications" heading and the title of a drawn title bar sat
-        // 11px too high until their next style change.
+        // pixels whatever the scale is. The reference is not given the
+        // scale that text.get_resource_scale() returns. For an actor that
+        // is not shown that can be 1 while its layout is at 2, and the
+        // text would then be moved up by one whole baseline: the
+        // "Notifications" heading and the title of a drawn title bar would
+        // sit 11px too high until their next style change.
         const layout = text.get_layout();
         const ref = layout.copy();
         ref.set_text('Ag', -1);
@@ -68,8 +68,8 @@ export function steadyLine(label) {
     // every one after a change of the theme or the scale. St.Label gives
     // the font to the text actor in its own handler of this signal, which
     // runs after handlers added with connect(). With connect() the first
-    // height was that of the default font, "Sans 12": 23px for a 15px line,
-    // until the next style change two frames later.
+    // height would be that of the default font, "Sans 12": 23px for a 15px
+    // line, until the next style change two frames later.
     label.connect_after('style-changed', sync);
     text.connect('resource-scale-changed', sync);
 }

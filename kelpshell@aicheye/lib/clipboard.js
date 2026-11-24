@@ -7,28 +7,25 @@
 // The list works like the one of Windows. It opens at the text cursor of
 // the focused window, or at the pointer when the window does not report a
 // text cursor, and it does not take the keyboard: the window keeps the
-// focus, and its text cursor stays where it is. The keys of the list (Up,
-// Down, Enter, Delete, Escape) are held as global shortcuts for as long as
-// it is open. Every other key goes to the window, and the list stays open:
-// the shell does not see the keys a window is given. For one afternoon the
-// list closed when the text cursor moved, taken as a sign of typing, but a
-// terminal reports its cursor late, after a paste, and that closed the list
-// as soon as it was opened again.
-//
-// Until 2026-11-21 the list was a dialog in the middle of the monitor that
-// took the keyboard, so the window lost the focus and its text cursor was
-// gone while the list was open.
+// focus, and its text cursor stays where it is. A dialog that took the
+// keyboard would take the focus from the window, and its text cursor would
+// be gone while the list was open. The keys of the list (Up, Down, Enter,
+// Delete, Escape) are held as global shortcuts for as long as it is open.
+// Every other key goes to the window, and the list stays open: the shell
+// does not see the keys a window is given. A move of the text cursor is not
+// taken as a sign of typing: a terminal reports its cursor late, after a
+// paste, and that would close the list as soon as it is opened again.
 //
 // The list is placed again whenever its height changes while it is open
-// (_place). It was placed once, when it opened. Something copied just
-// before Super+V is read from the clipboard after the list has opened, and
-// its row made a list that was over the text cursor one row taller, down
-// over the cursor.
+// (_place). Something copied just before Super+V is read from the clipboard
+// after the list has opened, and its row makes a list that is over the text
+// cursor one row taller: placed only once, it would reach down over the
+// cursor.
 //
 // Text and images are kept, the newest first. An entry that is copied again
 // moves to the top. Nothing is written to disk: the list lasts as long as
-// the shell process, and it is kept across the lock screen, which disables
-// the extension.
+// the shell process, and it is kept across the lock screen, which takes
+// this part of the extension down.
 //
 // What a password manager copies is left out. Such a program marks its
 // selection with the type x-kde-passwordManagerHint.
@@ -45,12 +42,11 @@
 // and Firefox gives GTK a new one at a key press only. So after a press on
 // a field of a page the shell has the rectangle of the field that had the
 // focus before, the URL bar for one, and the real one arrives two key
-// presses later or not at all (measured 2026-11-22 with Firefox 160; the
-// user: "it's like the wrong location"). A rectangle that came with the
-// focus of a field of such a program is not used, see _onTextFocus(), and
-// the list opens at the pointer. An empty commit from the input method made
-// GTK send the real rectangle, but Mutter did not pass it on: the main
-// surface did not commit.
+// presses later or not at all (measured with Firefox 160). A rectangle that
+// came with the focus of a field of such a program is not used, see
+// _onTextFocus(), and the list opens at the pointer. An empty commit from
+// the input method makes GTK send the real rectangle, but Mutter does not
+// pass it on: the main surface does not commit.
 //
 // The picker. The list is one page of four, as in the emoji panel of Windows:
 // emoji, emoticons, symbols and the clipboard, with a row of tabs at the
@@ -68,20 +64,17 @@
 // page is shown in a field like the one of the launcher.
 //
 // With nothing copied the clipboard page shows a picture and one line, and
-// the keys of the list are not held. Until 2026-11-22 the whole list was
-// then one hint line in a box 45 px high.
+// the keys of the list are not held.
 //
 // The list also opens over the launcher, at the text cursor of its search
-// field, and Enter then puts the text of the entry into that field. Until
-// 2026-11-21 Super+V did nothing there: the shortcut and the keys of the
-// list were allowed in the normal mode only, and the launcher is a popup.
-// The launcher holds the grab, so a press, a pointer motion and a scroll on
-// the list go to the launcher, which hands them over (press, hover, scroll).
-// The pages of the grid are searched there as they are over a window: the
-// letters are held, and the search field of the launcher gets them again
-// when the picker is closed or shows the clipboard. Until 2026-11-22 the
-// picker had no search field over the launcher, and a scroll was not handed
-// over (the user: "there's no search bar and i can't scroll").
+// field, and Enter then puts the text of the entry into that field. The
+// launcher is a popup, so the shortcut and the keys of the list are allowed
+// in the popup mode there. The launcher holds the grab, so a press, a
+// pointer motion and a scroll on the list go to the launcher, which hands
+// them over (press, hover, scroll). The pages of the grid are searched
+// there as they are over a window: the letters are held, and the search
+// field of the launcher gets them again when the picker is closed or shows
+// the clipboard.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -235,12 +228,9 @@ export class Clipboard {
 
         // The tabs, one beside the other over the whole width: a picture
         // or a short text each. The one that is shown has a fill, as a
-        // chosen row has.
-        //
-        // For an hour on 2026-11-22 the picker followed the panel of
-        // Windows closely: tabs at the left with a line under the one
-        // shown, then a title ("Clipboard") with a "Clear all" button. The
-        // user: "looks too windows like".
+        // chosen row has. The panel of Windows has its tabs at the left
+        // with a line under the one shown, then a title ("Clipboard") with
+        // a "Clear all" button: that look is not taken over.
         this._tabs = new St.BoxLayout({style_class: 'kelp-picker-tabs'});
         this._tabButtons = new Map();
         for (const tab of TABS) {
@@ -261,8 +251,7 @@ export class Clipboard {
         // the window keeps the keyboard, and the letters are held as
         // shortcuts (_grabKeys). The text cursor is an actor beside the
         // label, after what was typed, or before the hint of an empty
-        // field as in a GTK entry (the user, 2026-11-22: "the input doesnt
-        // feel native", "like there's no caret").
+        // field as in a GTK entry.
         this._title = new St.Label({
             style_class: 'kelp-picker-query', y_align: Clutter.ActorAlign.CENTER,
         });
@@ -475,9 +464,9 @@ export class Clipboard {
             if (serial !== this._serial || size === 0 || size > MAX_IMAGE)
                 return;
             // The GLib.Bytes of this callback is only read here, and only
-            // with get_size() and get_data(). On 2026-11-21 (GNOME Shell
-            // 51.1) bytes.hash() ended the shell with a segmentation fault,
-            // and GLib.compute_checksum_for_bytes(bytes) with a double free.
+            // with get_size() and get_data(). In GNOME Shell 51.1
+            // bytes.hash() ends the shell with a segmentation fault, and
+            // GLib.compute_checksum_for_bytes(bytes) with a double free.
             // The entry keeps a GLib.Bytes of its own, made from the copy.
             const data = bytes.get_data();
             this._add({kind: 'image', key: imageKey(data), mime, bytes: new GLib.Bytes(data)});
@@ -605,7 +594,7 @@ export class Clipboard {
         // it then had (137 against 121 with two rows, in the headless shell).
         // At a display scale of 2 it still reports 1 px too many for each
         // row until it has been laid out once, so it is also placed again
-        // whenever its height changes (see the constructor).
+        // whenever its height changes (see enable()).
         this._place();
         this._box.set_pivot_point(0, 0);
         this._box.set_scale(0.96, 0.96);

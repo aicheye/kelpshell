@@ -27,12 +27,12 @@
 //
 // A window is in a picture only while its frame lies under a layer that
 // shows that picture. A clone is drawn again whenever its window is, and
-// the picture and every layer that shows it with it: 180 ms of processor
-// time and 177 ms of graphics time in each second in which a window drew a
-// frame, at 60 frames (measured 2026-11-22), although the window was not
-// under the sidebar. So the first column, which starts where the sidebar's
-// room ends, is in no picture, and its light no longer spreads into the
-// cards next to it.
+// the picture and every layer that shows it with it: for a window that is
+// not under the sidebar, that is 180 ms of processor time and 177 ms of
+// graphics time in each second in which the window draws a frame, at 60
+// frames (measured). So the first column, which starts where the sidebar's
+// room ends, is in no picture, and its light does not spread into the cards
+// next to it.
 //
 // Each card has a layer under its content with a clone of that picture,
 // scaled back up and placed so that it lines up with the screen. The layer's
@@ -41,23 +41,22 @@
 // The layers and the clones are placed again before the next frame after
 // something they depend on has changed: a layer or an actor above it was
 // laid out, moved or scaled (the sidebar slides over a fullscreen window by
-// its translation), or a window was. Until 2026-11-22 all of it was read
-// before every frame, which took 12 ms in each second at 60 frames with
-// nothing moving. While the shell slides the workspaces it is still every
-// frame: the copies it slides are moved by actors that are not watched.
+// its translation), or a window was. Reading all of it before every frame
+// takes 12 ms in each second at 60 frames with nothing moving (measured).
+// While the shell slides the workspaces it is read before every frame: the
+// copies it slides are moved by actors that are not watched.
 //
-// History, all of 2026-11-21:
+// Three more reasons for how the picture is made:
 //
-//   - The picture was the window group with the wallpaper, blurred 32 px
-//     wide, and took the tint strength of the material. With
-//     theme.tintStrength at 1, which gives flat cards, the cards showed no
-//     blur at all. The blur now has its own strength (theme.liveBlurTint).
-//   - The shell's own blur effect took 0.9 ms of every frame in which a
-//     window moved, on a picture of 240 x 135 pixels.
-//   - theme.opacity applied to the blurred picture too. At 0.9 the text of
-//     a white window showed through a card at a tenth of its strength,
-//     under the card's own text. The picture is now opaque where a window
-//     is.
+//   - The tint of the blur has a strength of its own (theme.liveBlurTint)
+//     and not the tint strength of the material. With theme.tintStrength at
+//     1, which gives flat cards, the cards would show no blur at all.
+//   - The blur is a shader of this file. The shell's own blur effect takes
+//     0.9 ms of every frame in which a window moves, on a picture of
+//     240 x 135 pixels (measured).
+//   - theme.opacity does not apply to the blurred picture, which is opaque
+//     where a window is. At 0.9 the text of a white window would show
+//     through a card at a tenth of its strength, under the card's own text.
 
 import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
@@ -79,10 +78,9 @@ const DIVISOR = 8;
 // 1920 px monitor. The Gaussian has a sigma of SIGMA_SAMPLES samples, so the
 // samples are 6 px apart there, three quarters of a pixel of the picture.
 //
-// Until 2026-11-21 the picture was 1/4 of the monitor and the blur 12 px,
-// which left the lines of a text as separate bands. Samples one and a half
-// pixels apart on that picture, for the same 24 px, drew stripes as far
-// apart as the picture's rows.
+// A blur of 12 px leaves the lines of a text as separate bands. On a picture
+// of 1/4 of the monitor, the samples of a blur of 24 px are one and a half
+// pixels apart, and draw stripes as far apart as the picture's rows.
 const SIGMA = 1 / 80;
 const SIGMA_SAMPLES = 4;
 // The sharper pictures (Glass.setFineArea): each has this many times the
@@ -93,9 +91,9 @@ const FINE = [2, 4, 8];
 // The picture is this many of its pixels larger than the monitor on every
 // side. A layer draws the picture enlarged, and at the picture's edge the
 // enlarging mixes the outermost pixel with nothing, so without the margin
-// the windows showed sharp through the first 4 px at the edge of the monitor
-// (seen on 2026-11-21 as marks of text beside the sidebar's cards). The blur
-// does not read the margin, so a window on the next monitor is not in it.
+// the windows show sharp through the first 4 px at the edge of the monitor,
+// as marks of text beside the sidebar's cards. The blur does not read the
+// margin, so a window on the next monitor is not in it.
 const PAD = 1;
 
 export const HAVE_GLASS = HAVE_SNIPPETS;
@@ -274,10 +272,10 @@ class KelpGlassEffect extends CornerEffect {
 /**
  * The picture as a layer shows it. A clone has the paint volume of its
  * source, here the whole picture at the size of the monitor, and a redraw is
- * asked for with that volume, whatever clips the actors above it. Every
- * time a picture changed, the whole primary monitor was drawn again, and
- * 8 px of the next one (measured 2026-11-22). The volume is the part inside
- * the layer.
+ * asked for with that volume, whatever clips the actors above it. With that
+ * volume, every time a picture changes, the whole primary monitor is drawn
+ * again, and 8 px of the next one (measured). The volume given here is the
+ * part inside the layer.
  */
 const PictureView = GObject.registerClass(
 class KelpPictureView extends Clutter.Clone {
@@ -371,12 +369,10 @@ class Mirrors {
             // it for that, but still the box of the old one. Reading the
             // box makes the stage lay out now if this actor waits for it.
             //
-            // Until 2026-11-23 the clone was placed from the old box and
-            // the new scale. A window that left the full width
-            // (maximize-column, or cycle-width from 2/3) was drawn across
-            // the whole width under the sidebar for one frame (the user:
-            // "there's a frame where there's like a visual artifact on
-            // the sidebar").
+            // With the clone placed from the old box and the new scale, a
+            // window that leaves the full width (maximize-column, or
+            // cycle-width from 2/3) would be drawn across the whole width
+            // under the sidebar for one frame.
             source.get_allocation_box();
             let shown = source.visible;
             if (shown && under && frameOf) {
@@ -789,13 +785,11 @@ export class Glass {
      * when the monitor leaves fullscreen, which a switch away from a
      * workspace with a fullscreen window does at its start or its end.
      *
-     * Until 2026-11-22 a picture made during a slide showed the windows.
-     * The window actors of both workspaces are visible under the shell's
-     * group until the slide is over, so the width under the sidebar showed
-     * the fullscreen window, blurred and still, over the workspaces that
-     * slid (the user: "when i switch workspaces while full screened
-     * sometimes the sidebar has this weird grey background", "i think
-     * it's the full screen image left over").
+     * A picture made during a slide must not show the windows. The window
+     * actors of both workspaces are visible under the shell's group until
+     * the slide is over, so the width under the sidebar would show the
+     * fullscreen window, blurred and still, over the workspaces that
+     * slide.
      */
     _applySliding() {
         for (const picture of [...this._pictures, ...this._fine]) {
@@ -866,11 +860,12 @@ export class Glass {
             // The box the stage gives the layer in this frame: reading it
             // makes the stage lay out now if the layer waits for it, as
             // for a window in Mirrors.sync(). A layer that waits answers
-            // get_size() with its natural size. Until 2026-11-23 a card
-            // whose content changed with the windows (the minimap, when a
-            // column changes its width) was taken to be 224 px wide for
-            // one frame, not 164, so the first column counted as under it
-            // and its light showed at the edge of the cards in that frame.
+            // get_size() with its natural size. With that size, a card
+            // whose content changes with the windows (the minimap, when a
+            // column changes its width) would be taken to be 224 px wide
+            // for one frame, not 164, so the first column would count as
+            // under it and its light would show at the edge of the cards
+            // in that frame.
             const box = layer.get_allocation_box();
             const [x, y] = layer.get_transformed_position();
             if (!Number.isFinite(x) || !Number.isFinite(y))

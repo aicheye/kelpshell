@@ -19,12 +19,10 @@
 // The wallpapers themselves are drawn as they are at rest, so nothing
 // changes when a switch starts or ends.
 //
-// Two earlier versions of 2026-11-21 did not last the day. In the first the
-// wallpaper stood still and only the windows moved. In the second the blur
-// followed the progress of the switch: the whole wallpaper was blurred
-// halfway, and each wallpaper was blurred towards its edge over a length
-// that grew with the progress. Under a three-finger swipe that changed with
-// every movement of the fingers.
+// The blur does not follow the progress of the switch. With the whole
+// wallpaper blurred halfway, and each wallpaper blurred towards its edge
+// over a length that grows with the progress, the picture under a
+// three-finger swipe changes with every movement of the fingers.
 //
 // The edge fade of the primary monitor (lib/edgefade.js) is a still copy of
 // the wallpaper drawn over the windows. It cannot stand for a wallpaper that
