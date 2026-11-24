@@ -121,9 +121,11 @@ Everything follows the style chosen in Settings > Appearance, the shell's own po
 | Gesture | Action |
 | --- | --- |
 | Three fingers sideways | Scroll the strip. The windows follow the fingers and settle on a column |
-| Three fingers up or down | Switch workspace |
+| Three fingers up or down | Slide the workspaces. A flick, or a drag past half of the way, switches |
 | Four fingers up or down | Open or close the launcher |
 | Three fingers sideways over a fullscreen window | Bring the next window, or the sidebar, in over it |
+
+A three-finger swipe moves the windows and the workspaces as far as the same movement moves the pointer.
 
 Two-finger scrolling is evened out between toolkits, so GTK, Firefox and Chromium windows scroll the same distance for the same movement.
 

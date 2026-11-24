@@ -26,6 +26,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as WorkspaceAnimation from 'resource:///org/gnome/shell/ui/workspaceAnimation.js';
 
 import {Spring, rubberBand} from './spring.js';
+import {pointerDelta} from './swipe.js';
 import {Corners, surfaceOf} from './corners.js';
 import {EdgeFade} from './edgefade.js';
 import {decorateSwitch} from './wsslide.js';
@@ -89,8 +90,6 @@ const PENDING_MS = 400;
 // the place its column gave it did not take the size, see _refusedSize.
 const REFUSED_SIZE = 0.75;
 
-// Touchpad swipe. Distances are in touchpad units as libinput reports them
-// without acceleration, the same units the shell's own gestures use.
 // A client can refuse to become as narrow as its column without declaring a
 // minimum size (Firefox does). This long after a frame is requested, a frame
 // that is still wider than the request is taken as the window's minimum.
@@ -138,8 +137,10 @@ const OPEN_SIZE_MS = 600;
 // A window that is out of the view lies this far left of the leftmost
 // monitor, see Tile._park().
 const PARK_GAP = 256;
+// Touchpad swipe. The axis is decided in touchpad units, as libinput reports
+// them without acceleration. The strip then moves in px, as far as the
+// pointer would for the same movement, see lib/swipe.js.
 const SWIPE_DISTANCE = 16;          // units before the axis is decided, as in the shell
-const SWIPE_UNITS_PER_VIEW = 1200;  // units that scroll the strip by one view width
 const SWIPE_COAST = 0.3;            // s of the release velocity added as coasting distance
 const SWIPE_FLICK = 300;            // px/s: a faster release moves focus to the next column
 const SWIPE_SWITCH_SHARE = 0.08;    // of the view width: a slower release that travelled this far does too
@@ -4934,12 +4935,12 @@ export class Tiling {
                 s.strip = this.activeStrip();
                 s.strip.swipeBegin();
             }
+            // The strip moves as far as the pointer would, see lib/swipe.js.
             // With natural scrolling the windows follow the fingers. Without
             // it they move the other way, as they do in the shell's gestures.
             const natural = this._touchpad.get_boolean('natural-scroll');
-            const gain = s.strip.viewWidth / SWIPE_UNITS_PER_VIEW *
-                clamp(this.config.values.gestures.sensitivity, 0.1, 10);
-            s.strip.swipeUpdate((natural ? -dx : dx) * gain, event.get_time());
+            const [px] = pointerDelta(event, s.strip.monitor, this.config);
+            s.strip.swipeUpdate(natural ? -px : px, event.get_time());
             return Clutter.EVENT_STOP;
         }
 

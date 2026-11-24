@@ -128,8 +128,8 @@
 
   "gestures": {
     "swipeScroll": true,        // three-finger horizontal swipe scrolls the strip
-    "sensitivity": 1            // 1: a swipe of 1200 touchpad units scrolls one view width.
-                                // 2 scrolls twice as far for the same swipe
+    "sensitivity": 1            // 1: a three-finger swipe moves the windows and the workspaces as far
+                                // as the same movement moves the pointer. 2 moves them twice as far
   },
 
   // Each action takes a list of accelerators in GTK syntax. Use [] to unbind.
