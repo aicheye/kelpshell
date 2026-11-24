@@ -1201,8 +1201,12 @@ class Minimap {
         this._settleCaption(this._rows.get_child_at_index(active),
             before?.index === active ? before : null);
         this._rebuildMonitors(others, focus, beforeOn);
-        if (this._active !== undefined && this._active !== active && !this._collapsed)
+        // Not after a swipe: the icons of that row have grown to their
+        // size with the fingers.
+        if (this._active !== undefined && this._active !== active && !this._collapsed &&
+            !this._morphed)
             this._arrive(this._rows.get_child_at_index(active));
+        this._morphed = false;
         this._active = active;
     }
 
@@ -1211,6 +1215,11 @@ class Minimap {
      * has ended (Tiling.between). While it lasts, the fill of the active
      * workspace lies between the rows of the two workspaces, and the fill
      * of the focused window between the icons of the two windows.
+     *
+     * Between two workspaces, the two rows are drawn between their forms
+     * by the same share (_morphRow), and the fill of the focused window
+     * lies between the icon it is on and the icon of the window that has
+     * the focus of the other workspace.
      *
      * When it ends, the rows are built for the new workspace or focus at
      * once, where that is queued, and the fills go on from where they are
@@ -1243,12 +1252,46 @@ class Minimap {
         };
         place(this._marked.rowMark,
             workspaces && rows[workspaces[0]], workspaces && rows[workspaces[1]], workspaces?.[2]);
+        // The window a workspace shows as focused: the one that has the
+        // focus, in the active workspace, else the one its strip has.
+        const active = global.workspace_manager.get_active_workspace_index();
+        const focus = global.display.focus_window;
+        const focusOf = index => index === active && focus && rows[index]?._slots?.some(slot => slot.win === focus)
+            ? focus : this._tiling.focusOf(index);
+        let pair = windows;
+        if (!pair && workspaces) {
+            const [a, b, share] = workspaces;
+            pair = [focusOf(a), focusOf(b), share];
+        }
         place(this._marked.cellMark,
-            windows && cellOf(windows[0]), windows && cellOf(windows[1]), windows?.[2]);
-        if (!ended)
+            pair && cellOf(pair[0]), pair && cellOf(pair[1]), pair?.[2]);
+        if (workspaces && !this._collapsed) {
+            const [a, b, share] = workspaces;
+            rows.forEach((row, index) => {
+                let amount = 0;
+                if (index === a)
+                    amount = a === b ? 1 : 1 - share;
+                else if (index === b)
+                    amount = share;
+                // Not a row that has its form: at rest and built at rest.
+                if (amount !== row._amount)
+                    this._morphRow(row, amount, focusOf(index));
+            });
+            this._morphing = true;
+        }
+        // The rows that were drawn between two forms are built again in
+        // any case: their icons have a picture of another size.
+        const morphed = this._morphing && !workspaces;
+        if (!ended && !morphed)
             return;
-        if (this._idleId && !this._dragging) {
-            GLib.source_remove(this._idleId);
+        if (morphed) {
+            this._morphing = false;
+            this._morphed = true;
+            this._signature = '';
+        }
+        if ((this._idleId || morphed) && !this._dragging) {
+            if (this._idleId)
+                GLib.source_remove(this._idleId);
             this._idleId = 0;
             this._rebuild();
         }
@@ -1478,14 +1521,26 @@ class Minimap {
         // a window of the workspace has the focus, and keeps it when the
         // pointer moves over an icon. With no focused window here it has no
         // height: _rebuild() closes and opens it.
+        // Every other row has the line too, with no height. A swipe to that
+        // workspace opens it with the fingers, see _morphRow.
         let caption = null;
         let reveal = null;
-        if (grid && active) {
-            caption = label('', 'kelp-ws-caption', {x_expand: true});
-            reveal = new Reveal(caption);
+        let restCaption = null;
+        let restReveal = null;
+        if (grid) {
+            const line = label('', 'kelp-ws-caption', {x_expand: true});
+            const shown = new Reveal(line);
+            if (active) {
+                caption = line;
+                reveal = shown;
+            } else {
+                restCaption = line;
+                restReveal = shown;
+                shown.share = 0;
+            }
             const column = new St.BoxLayout({orientation: VERTICAL, x_expand: true});
             column.add_child(cells);
-            column.add_child(reveal);
+            column.add_child(shown);
             box.add_child(column);
         } else {
             box.add_child(cells);
@@ -1524,7 +1579,70 @@ class Minimap {
         row._caption = caption;
         row._reveal = reveal;
         row._named = named !== null;
+        // For _morphRow(): the form the row was built in, and its parts.
+        row._built = active ? 1 : 0;
+        row._amount = row._built;
+        row._cellBox = cells;
+        row._number = grid ? box.first_child : null;
+        row._restCaption = restCaption;
+        row._restReveal = restReveal;
         return row;
+    }
+
+    /**
+     * Draw a row of the grid between its form at rest (amount 0) and the
+     * form of the active workspace (1): the cells from 24 to 30 px and
+     * their icons from 16 to 24 px, the icons from REST_OPACITY to full,
+     * the number from its place and colour at rest to those of the active
+     * row, and the title line from closed to open. A swipe up or down
+     * gives the row it leaves and the row it goes to their amounts, so
+     * both change with the fingers (_syncBetween). focus: the window whose
+     * title the line of a row at rest shows as it opens, or null.
+     *
+     * The rows are built again when the workspace has changed, and take
+     * these forms then in one step: the active row with its icons at their
+     * size from the first frame. With nothing drawn in between, the icons
+     * and the title line stood still for the whole swipe and changed after
+     * it.
+     *
+     * An icon is scaled from a picture of 24 px, also in the row that
+     * grows: its picture of 16 px would be drawn at one and a half times
+     * its size by the end of the swipe.
+     */
+    _morphRow(row, amount, focus) {
+        if (!row?._cellBox || !row._number || row._amount === amount)
+            return;
+        row._amount = amount;
+        const k = scaleFactor();
+        const size = (24 + 6 * amount) * k;
+        for (const cell of row._cellBox.get_children()) {
+            cell.set_size(size, size);
+            const icon = cell._icon;
+            if (!icon)
+                continue;
+            if (cell._iconPx < 24 && icon instanceof St.Icon) {
+                icon.icon_size = 24;
+                cell._iconPx = 24;
+            }
+            const scale = (16 + 8 * amount) / cell._iconPx;
+            icon.set_pivot_point(0.5, 0.5);
+            icon.set_scale(scale, scale);
+        }
+        if (!row.hover)
+            row._cellBox.opacity = Math.round(REST_OPACITY + (255 - REST_OPACITY) * amount);
+        // The number of a row at rest has the colour of the active one at
+        // 36% (.kelp-ws-number), and lies 3 px higher.
+        row.add_style_pseudo_class('checked');
+        row._number.opacity = Math.round(255 * (0.36 + 0.64 * amount));
+        row._number.translation_y = (4 + 3 * amount - (row._built ? 7 : 4)) * k;
+        const reveal = row._reveal ?? row._restReveal;
+        if (!reveal)
+            return;
+        if (row._restCaption)
+            row._restCaption.text = focus?.title ?? '';
+        const open = row._built ? row._named : focus !== null;
+        reveal.remove_transition('share');
+        reveal.share = open ? amount : 0;
     }
 
     /**
@@ -1591,6 +1709,9 @@ class Minimap {
             child: icon,
             can_focus: true,
         });
+        // For _morphRow(): the icon, and the size its picture has.
+        cell._icon = icon;
+        cell._iconPx = s;
         if (focused)
             cell.add_style_pseudo_class('checked');
         if (win.urgent || win.demands_attention)

@@ -3588,6 +3588,21 @@ export class Tiling {
     }
 
     /**
+     * The window the strip of a workspace has in focus on the primary
+     * monitor, by the index of the workspace: the one that takes the focus
+     * when that workspace is shown. null for none.
+     */
+    focusOf(index) {
+        const ws = global.workspace_manager.get_workspace_by_index(index);
+        const primary = global.display.get_primary_monitor();
+        for (const strip of this.strips.values()) {
+            if (ws && strip.workspace === ws && strip.monitor === primary)
+                return strip.focus?.win ?? null;
+        }
+        return null;
+    }
+
+    /**
      * The shell slides the workspaces of the primary monitor in group, a
      * MonitorGroup. While the fingers of a swipe do that, and when it goes
      * on by itself after they have lifted, its progress is told as the two
