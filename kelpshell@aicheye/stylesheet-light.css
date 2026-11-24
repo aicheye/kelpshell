@@ -417,7 +417,9 @@
 .kelp-media-head {
   spacing: 10px;
 }
-/* 8px behind the 7px card padding, and the cover 3px inside that is 5px. */
+/* 8px behind the 7px card padding. The cover in it has square corners, as
+   the picture itself has (the user, 2026-11-23: "don't round corner of album
+   art"). Until then it had 5px, and 7px collapsed. */
 .kelp-media-jump {
   border-radius: 8px;
   padding: 3px;
@@ -433,7 +435,6 @@
 .kelp-media-cover {
   width: 40px;
   height: 40px;
-  border-radius: 5px;
   background-color: rgba(0, 0, 0, 0.08);
 }
 .kelp-media-cover-icon {
@@ -479,7 +480,7 @@
   padding: 6px;
   spacing: 4px;
 }
-/* Collapsed, behind 6px of card padding: 9px, and the cover 2px inside 7px. */
+/* Collapsed, behind 6px of card padding: 9px. */
 .collapsed .kelp-media-jump {
   border-radius: 9px;
   padding: 2px;
@@ -487,7 +488,6 @@
 .collapsed .kelp-media-cover {
   width: 34px;
   height: 34px;
-  border-radius: 7px;
 }
 .collapsed .kelp-media-button {
   border-radius: 9px;
