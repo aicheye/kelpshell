@@ -52,8 +52,8 @@ const BUTTON = 24;
 const BUTTON_GAP = 13;
 const BUTTON_MARGIN = 7;
 
-// The resize handles, px. Outside they stay inside layout.gap (10), so the
-// handles of two windows next to each other do not overlap by much.
+// The resize handles, px. Outside they stay inside layout.gap (8), so the
+// handles of two windows next to each other do not overlap.
 const HANDLE_OUT = 8;
 const HANDLE_IN = 3;
 const HANDLE_CORNER = 20;

@@ -7,8 +7,8 @@
   "sidebar": {
     "width": 164,            // px, card width when expanded
     "collapsedWidth": 52,    // px, card width when collapsed
-    "margin": 10,            // px between the screen edge and the cards
-    "gap": 8,                // px between cards
+    "margin": 8,             // px between the screen edge and the cards
+    "gap": 6,                // px between cards
     "collapsed": false,      // start collapsed
     "previewDelay": 350,     // ms of hover before a window thumbnail shows
     "notifications": 3,      // rows shown in the notification card
@@ -20,7 +20,7 @@
   },
 
   "layout": {
-    "gap": 10,                               // px between windows and around the strip
+    "gap": 8,                                // px between windows and around the strip
     "presetWidths": [0.33333, 0.5, 0.66667], // cycle-width steps, as a share of the view
     "defaultWidth": 0.5,                     // width of a new column
     "rememberWidths": true,                  // a new window opens at the width last set for
@@ -142,7 +142,7 @@
     "focus-first": ["<Super>Home"],
     "focus-last": ["<Super>End"],
 
-    "move-left": ["<Super><Control>a", "<Super><Control>Left"],     // move the column
+    "move-left": ["<Super><Control>a", "<Super><Control>Left"],     // move the column, then to the monitor on that side
     "move-right": ["<Super><Control>d", "<Super><Control>Right"],
     "move-up": ["<Super><Control>w", "<Super><Control>Up"],         // move the window in its column, then to the workspace above
     "move-down": ["<Super><Control>s", "<Super><Control>Down"],

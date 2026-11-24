@@ -522,6 +522,9 @@ ratio of its proportion, so every window on it stays in view. `Super+R` and
 `Super+R` after the last preset lets the column share the width again. A
 window that is alone on the monitor is then narrower than it and sits in the
 middle.
+No column there is narrower than its windows go, so no window lies over the
+one next to it: `Super+F` and the width keys make a column as wide as the
+minimum widths of the other columns and the gaps leave room for.
 `layout.scrollSecondary: true` gives it a scrolling strip like the primary.
 
 **Clipboard helpers.** `wl-copy` sets the clipboard by opening an invisible
@@ -554,7 +557,7 @@ All of them come back when the extension is disabled.
 | Three-finger swipe up into the overview | Three-finger swipe up and down switches workspace. A four-finger swipe up opens the launcher |
 | Hot corner (top left) | It opens the launcher where it opened the overview, with the shell's ripple. `launcher.hotCorner: false` turns it off |
 | App switcher on `Alt+Tab` and `Super+Tab` | The window switcher |
-| Edge tiling (drag a window to a screen edge) | Nothing. A window dropped on the middle of a column stacks into it, and one dropped between columns becomes a column there. A preview shows the place while dragging. The window lands on the monitor the pointer is on, also when most of the window is over the next monitor |
+| Edge tiling (drag a window to a screen edge) | Nothing. A window dropped on the middle of a column stacks into it, and one dropped between columns becomes a column there. While dragging, a panel shows the place in a stack, a bar shows the place between two columns, and before the first or after the last column a panel shows the place and the width the window takes. The window lands on the monitor the pointer is on, also when most of the window is over the next monitor |
 
 The hot corner and edge tiling are GNOME settings
 (`org.gnome.desktop.interface enable-hot-corners`, `org.gnome.mutter
@@ -571,13 +574,13 @@ All of these are set in the config file.
 | `Super+A` / `D`, or `Super+Left` / `Right` | Focus the column to the left or right, then the monitor on that side |
 | `Super+W` / `S`, or `Super+Up` / `Down` | Focus the window above or below, then the next workspace, then the monitor above or below |
 | `Super+Home` / `End` | Focus the first or last column |
-| `Super+Ctrl+A` / `D`, or `Super+Ctrl+Left` / `Right` | Move the column |
-| `Super+Ctrl+W` / `S`, or `Super+Ctrl+Up` / `Down` | Move the window in its column, then to the next workspace |
+| `Super+Ctrl+A` / `D`, or `Super+Ctrl+Left` / `Right` | Move the column. Past the first or the last column it goes to the monitor on that side, where the opposite key brings it back. A floating window goes to that monitor too |
+| `Super+Ctrl+W` / `S`, or `Super+Ctrl+Up` / `Down` | Move the window in its column, then to the next workspace, or to a monitor above or below where there is no workspace to go to |
 | `Super+[` / `]` | Stack the window into the neighbouring column, or take it out of a stack |
-| `Super+R` | Cycle the column width through 1/3, 1/2, 2/3 |
+| `Super+R` | Cycle the column width through 1/3, 1/2, 2/3. A fullscreen window leaves fullscreen for 1/3 |
 | `Super+-` / `=` | Narrow or widen the column by 10% |
 | `Super+Shift+-` / `=` | Shrink or grow the window in a stack |
-| `Super+F` | Toggle the column to full width. A column that is already that wide, however it got there, goes back to the width it had before, or to two thirds |
+| `Super+F` | Toggle the column to full width. A column that is already that wide, however it got there, goes back to the width it had before, or to two thirds. A fullscreen window leaves fullscreen for a column of full width |
 | `Super+Shift+F` | Fullscreen |
 | `Super+C`, `Super+Shift+W` | Centre the column, as far as the ends of the strip allow |
 | `Super+Shift+A` / `D` | Slide the window to the left or right side of the screen (the view scrolls, the order stays) |

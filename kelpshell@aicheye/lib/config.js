@@ -8,8 +8,8 @@ export const DEFAULTS = {
     sidebar: {
         width: 164,           // px, expanded card width
         collapsedWidth: 52,   // px, collapsed card width
-        margin: 10,           // px between screen edge and cards
-        gap: 8,               // px between cards
+        margin: 8,            // px between screen edge and cards
+        gap: 6,               // px between cards
         collapsed: false,
         previewDelay: 350,    // ms hover before a window thumbnail shows
         notifications: 3,     // rows shown in the notification card
@@ -21,7 +21,7 @@ export const DEFAULTS = {
         statusFill: ['powerMode', 'bluetooth'],
     },
     layout: {
-        gap: 10,
+        gap: 8,
         presetWidths: [0.33333, 0.5, 0.66667],
         defaultWidth: 0.5,
         rememberWidths: true, // a new window opens at the width last set for its app

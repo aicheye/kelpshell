@@ -208,7 +208,7 @@ function minSize(win) {
 
 /**
  * Shows where a dragged window lands: a panel over the place it takes in a
- * stack, or a bar between two columns.
+ * stack or at an end of the strip, or a bar between two columns.
  */
 class DropHint {
     constructor() {
@@ -1349,6 +1349,38 @@ class Strip {
         return col;
     }
 
+    /**
+     * The place a tile takes as a column of its own at index, once that
+     * column has the focus and the view has followed it: {x, y, width,
+     * height} on the stage. The index counts the columns without the
+     * tile's own column when the tile is alone in it, as addColumn() does
+     * after the tile is taken out. The strip is left as it was.
+     */
+    placeAsColumn(tile, index, proportion = null) {
+        const columns = this.columns;
+        const own = tile.strip === this ? tile.column : null;
+        const col = new Column(proportion ?? this.wm.config.values.layout.defaultWidth);
+        col.tiles.push(tile);
+        const next = columns.filter(c => c !== own || c.tiles.length > 1);
+        next.splice(clamp(index, 0, next.length), 0, col);
+        try {
+            this.columns = next;
+            const {area, gap, viewW} = this._measure();
+            const scroll = Math.round(this._scrollTo(col, viewW, this.scroll));
+            const shift = this._shiftFor(col, scroll, viewW);
+            return {
+                x: area.x - shift + gap + col.x - scroll,
+                y: area.y + gap,
+                width: col.width,
+                height: Math.max(40, area.height - 2 * gap),
+            };
+        } finally {
+            // The widths and places of the columns as they are.
+            this.columns = columns;
+            this._measure();
+        }
+    }
+
     /** Add a tile to an existing column at row. */
     addToColumn(tile, col, row = null) {
         col.tiles.splice(row ?? col.tiles.length, 0, tile);
@@ -1442,30 +1474,9 @@ class Strip {
     widthFor(col, proportion,
         {area = this.area, gap = this.gap, learned = true, pinned = col.pinned} = {}) {
         const viewW = Math.max(MIN_COLUMN_WIDTH, area.width - 2 * gap);
-        if (this.fits) {
-            // A pending column has the width it gets once it counts. The
-            // others share the view without it.
-            const sharing = this.columns.filter(c => c === col || !c.pending);
-            const n = sharing.length;
-            const shared = viewW - (n - 1) * gap;
-            const share = c => (c === col ? proportion : c.proportion);
-            const isPinned = c => (c === col ? pinned : c.pinned);
-            // A pinned column has the width its proportion gives on a
-            // scrolling strip. Together the pinned columns leave every
-            // other column MIN_COLUMN_WIDTH, or an equal share of the view
-            // if that is less.
-            const want = c => Math.max(1, Math.round((area.width - gap) * share(c) - gap));
-            const free = sharing.filter(c => !isPinned(c));
-            const room = shared - free.length * Math.min(MIN_COLUMN_WIDTH, Math.floor(shared / n));
-            const wanted = sharing.filter(isPinned).reduce((sum, c) => sum + want(c), 0);
-            if (pinned)
-                return Math.max(1, Math.floor(want(col) * Math.min(1, room / wanted)));
-            const total = free.reduce((sum, c) => sum + share(c), 0);
-            const rest = shared - Math.min(wanted, room);
-            return Math.max(1, Math.floor(rest * proportion / Math.max(total, proportion)));
-        }
-        const min = Math.max(MIN_COLUMN_WIDTH,
-            ...col.tiles.map(t => Math.max(minSize(t.win)[0], learned ? t.minWidth : 0)));
+        if (this.fits)
+            return this._fitWidth(col, proportion, {area, gap, viewW, learned, pinned});
+        const min = this._leastWidth(col, learned);
         const width = p => Math.round((area.width - gap) * p - gap);
         const want = width(proportion);
         // Wider than the view over a fullscreen window, see fullProportion.
@@ -1488,6 +1499,68 @@ class Strip {
                 least = Math.min(...near);
         }
         return clamp(want, least, cap);
+    }
+
+    /**
+     * The narrowest a column goes: the widest of the minimum sizes its
+     * windows declare, and of the widths they kept when asked for less
+     * (learned: false leaves those out).
+     */
+    _leastWidth(col, learned = true) {
+        return Math.max(MIN_COLUMN_WIDTH,
+            ...col.tiles.map(t => Math.max(minSize(t.win)[0], learned ? t.minWidth : 0)));
+    }
+
+    /**
+     * widthFor() on a strip that does not scroll. The columns share the
+     * view, and none is narrower than its windows go, so no window lies
+     * over the one next to it.
+     *
+     * A pinned column has the width its proportion gives on a scrolling
+     * strip, as far as the others allow: together the pinned columns leave
+     * every other column its least width. The columns that are not pinned
+     * share what is left in the ratio of their proportions.
+     */
+    _fitWidth(col, proportion, {area, gap, viewW, learned, pinned}) {
+        // A pending column has the width it gets once it counts. The
+        // others share the view without it.
+        const sharing = this.columns.filter(c => c === col || !c.pending);
+        const shared = viewW - (sharing.length - 1) * gap;
+        const share = c => (c === col ? proportion : c.proportion);
+        const isPinned = c => (c === col ? pinned : c.pinned);
+        const sum = (cols, f) => cols.reduce((total, c) => total + f(c), 0);
+        // On a view too narrow for all of them, each has its part of it.
+        const leasts = new Map(sharing.map(c => [c, this._leastWidth(c, c !== col || learned)]));
+        const fit = Math.min(1, shared / sum(sharing, c => leasts.get(c)));
+        const least = c => Math.max(1, Math.floor(leasts.get(c) * fit));
+        const want = c => Math.max(least(c), Math.round((area.width - gap) * share(c) - gap));
+
+        const fixed = sharing.filter(isPinned);
+        const free = sharing.filter(c => !isPinned(c));
+        const room = shared - sum(free, least);
+        const wanted = sum(fixed, want);
+        const base = sum(fixed, least);
+        // Pinned columns that want more than there is give up the same
+        // part of what each has over its least width.
+        const part = wanted > room ? Math.max(0, room - base) / (wanted - base) : 1;
+        const fixedWidth = c => Math.floor(least(c) + (want(c) - least(c)) * part);
+        if (pinned)
+            return fixedWidth(col);
+
+        // A column whose share is under its least width has that width,
+        // and the others share what is then left.
+        let rest = shared - sum(fixed, fixedWidth);
+        let open = free;
+        for (;;) {
+            const total = sum(open, share);
+            const short = open.filter(c => rest * share(c) / total < least(c));
+            if (short.length === 0)
+                return Math.max(1, Math.floor(rest * proportion / total));
+            if (short.includes(col))
+                return least(col);
+            rest -= sum(short, least);
+            open = open.filter(c => !short.includes(c));
+        }
     }
 
     /** The proportion that gives a column this width. */
@@ -3148,6 +3221,7 @@ export class Tiling {
         // end(velocity), hold(), held()}.
         this.peekSink = null;
         this._home = new Map();        // new window -> monitor it is being sent to
+        this._rehomeHeld = false;      // see _moveToNeighbour
         this.focusTile = null;
         // The tile drawn at full size: the one that last had focus. It stays
         // while focus is on the launcher or on a floating window.
@@ -4424,7 +4498,7 @@ export class Tiling {
     /** The window changed workspace or monitor: move it to that strip. */
     _rehome(win) {
         const tile = this.tiles.get(win);
-        if (!tile || tile.grabbed)
+        if (!tile || tile.grabbed || this._rehomeHeld)
             return;
         const strip = this._stripFor(win);
         if (!strip || strip === tile.strip)
@@ -4664,7 +4738,7 @@ export class Tiling {
      * {index, rect} to become a column at an index. The index counts the
      * strip's columns without the dragged window's own column when the
      * window is alone in it, which is how the strip is once the window is
-     * taken out. rect is the place to show, or null.
+     * taken out. rect is the place to show.
      */
     _dropTarget(tile, strip, px, py) {
         const area = strip.area;
@@ -4704,16 +4778,14 @@ export class Tiling {
         }
         const prev = cols[index - 1];
         const next = cols[index];
-        let mid = null;
-        if (prev && next)
-            mid = (prev.x + prev.width + next.x) / 2;
-        else if (next)
-            mid = next.x - gap / 2;
-        else if (prev)
-            mid = prev.x + prev.width + gap / 2;
-        if (mid === null)
-            return {index, rect: null};
+        // Before the first column, after the last one, or on a strip with
+        // no other window: the place it has once it is dropped, at the
+        // width it keeps.
+        if (!prev || !next)
+            return {index, rect: strip.placeAsColumn(tile, index, tile.column?.proportion)};
+        // Between two columns: a bar in the gap they move apart from.
         const width = DROP_BAR_WIDTH * s;
+        const mid = (prev.x + prev.width + next.x) / 2;
         const x = clamp(Math.round(mid - width / 2), area.x, area.x + area.width - width);
         return {index, rect: {
             x, y: area.y + gap, width, height: area.height - 2 * gap, bar: true,
@@ -5247,15 +5319,25 @@ export class Tiling {
             this.moveToWorkspace(ws.index() + delta, win);
     }
 
+    /**
+     * Left and right along the strip. Past its first or last column the
+     * column goes to the monitor on that side, as the focus does with
+     * focusColumn(). So does a floating window.
+     */
     moveColumn(delta) {
+        const side = delta < 0 ? Meta.DisplayDirection.LEFT : Meta.DisplayDirection.RIGHT;
         const tile = this.focusTile;
-        if (!tile)
+        if (!tile) {
+            this._moveFloating(side);
             return;
+        }
         const strip = tile.strip;
         const idx = strip.columns.indexOf(tile.column);
         const to = idx + delta;
-        if (to < 0 || to >= strip.columns.length)
+        if (to < 0 || to >= strip.columns.length) {
+            this._moveToNeighbour([...tile.column.tiles], side);
             return;
+        }
         strip.columns.splice(idx, 1);
         strip.columns.splice(to, 0, tile.column);
         this._relayout(strip, tile);
@@ -5274,23 +5356,108 @@ export class Tiling {
         this._relayout(strip, tile);
     }
 
-    /** Up/down inside the column, then to the next workspace. */
+    /**
+     * Up/down inside the column, then to the next workspace. The window
+     * goes to a monitor above or below where there is no workspace to go
+     * to, as the focus does with focusRow().
+     */
     moveRow(delta) {
         const tile = this.focusTile;
-        if (!tile) {
-            this.moveToWorkspaceBy(delta);
-            return;
+        if (tile) {
+            const col = tile.column;
+            const row = col.tiles.indexOf(tile);
+            const to = row + delta;
+            if (to >= 0 && to < col.tiles.length) {
+                col.tiles.splice(row, 1);
+                col.tiles.splice(to, 0, tile);
+                this._relayout(tile.strip, tile);
+                return;
+            }
         }
-        const col = tile.column;
-        const row = col.tiles.indexOf(tile);
-        const to = row + delta;
-        if (to < 0 || to >= col.tiles.length) {
-            this.moveToWorkspaceBy(delta);
+        const win = global.display.focus_window;
+        const strip = tile?.strip ?? (win ? this._stripOn(win.get_monitor()) : null);
+        const side = delta < 0 ? Meta.DisplayDirection.UP : Meta.DisplayDirection.DOWN;
+        const wm = global.workspace_manager;
+        const index = wm.get_active_workspace_index() + delta;
+        const none = strip?.workspace === null || index < 0 || index >= wm.get_n_workspaces();
+        if (none && (tile ? this._moveToNeighbour([tile], side) : this._moveFloating(side)))
             return;
+        this.moveToWorkspaceBy(delta);
+    }
+
+    /**
+     * Move tiles of one strip to the monitor next to theirs in a
+     * direction, as one column in the order given. To the left or the right
+     * the column goes to the near end of that monitor's strip, so the
+     * opposite key brings it back. Up or down it goes right of the column
+     * that had the focus there. Returns false when there is no monitor on
+     * that side.
+     */
+    _moveToNeighbour(tiles, direction) {
+        const from = tiles[0].strip;
+        const next = global.display.get_monitor_neighbor_index(from.monitor, direction);
+        if (next < 0)
+            return false;
+        const focus = tiles.find(t => t === this.focusTile) ?? tiles[0];
+        const weights = tiles.map(t => t.weight);
+        // All of them before the first one changes strip: that lays out
+        // the strip it leaves, and Mutter moves a window that has been
+        // asked for a new size only when its client has answered.
+        this._rehomeHeld = true;
+        try {
+            for (const tile of tiles)
+                tile.win.move_to_monitor(next);
+        } finally {
+            this._rehomeHeld = false;
         }
-        col.tiles.splice(row, 1);
-        col.tiles.splice(to, 0, tile);
-        this._relayout(tile.strip, tile);
+        for (const tile of tiles)
+            this._rehome(tile.win);
+        const moved = tiles.filter(t => t.strip && t.strip !== from);
+        const lead = moved[0];
+        if (!lead)
+            return true;
+        // Each arrived as a column of its own.
+        const to = lead.strip;
+        const col = lead.column;
+        for (const tile of moved.slice(1)) {
+            to.remove(tile);
+            to.addToColumn(tile, col);
+        }
+        tiles.forEach((tile, i) => {
+            tile.weight = weights[i];
+        });
+        if (direction === Meta.DisplayDirection.LEFT ||
+            direction === Meta.DisplayDirection.RIGHT) {
+            to.columns.splice(to.columns.indexOf(col), 1);
+            if (direction === Meta.DisplayDirection.LEFT)
+                to.columns.push(col);
+            else
+                to.columns.unshift(col);
+        }
+        if (moved.includes(focus)) {
+            col.active = focus;
+            to.focus = focus;
+            this.setActiveMonitor(next);
+        }
+        from.layout(true);
+        this._relayout(to, to.focus);
+        return true;
+    }
+
+    /**
+     * Move the focused window, when it is not tiled, to the monitor next to
+     * its own in a direction. Returns false when nothing was moved.
+     */
+    _moveFloating(direction) {
+        const win = global.display.focus_window;
+        if (!win || this.tiles.has(win) || !this._listed(win) || !win.allows_move())
+            return false;
+        const next = global.display.get_monitor_neighbor_index(win.get_monitor(), direction);
+        if (next < 0)
+            return false;
+        win.move_to_monitor(next);
+        this.setActiveMonitor(next);
+        return true;
     }
 
     /** In a shared column: leave it to that side. Alone: join the neighbour. */
@@ -5326,6 +5493,11 @@ export class Tiling {
         this._changed();
     }
 
+    /**
+     * cycle-width: the next of layout.presetWidths. A fullscreen window
+     * leaves fullscreen for the first of them, as a column as wide as the
+     * view does.
+     */
     cycleWidth() {
         const tile = this.focusTile;
         if (!tile)
@@ -5335,11 +5507,20 @@ export class Tiling {
             return;
         const col = tile.column;
         const strip = tile.strip;
-        const cur = col.proportion;
+        const left = this._leaveFullscreen(tile);
         if (strip.fits) {
             this._cycleFitWidth(tile, presets);
+            if (left)
+                this._placeNow(tile);
             return;
         }
+        // From fullscreen the cycle starts at the widest, whatever width
+        // the column had under it.
+        if (left && !this._fillsStrip(tile)) {
+            col.restore = col.proportion;
+            col.proportion = strip.fullProportion;
+        }
+        const cur = col.proportion;
         // The presets in cycling order, starting after the current one.
         const ordered = [
             ...presets.filter(p => p > cur + 0.01),
@@ -5352,6 +5533,42 @@ export class Tiling {
         const width = strip.widthFor(col, cur);
         const next = ordered.find(p => Math.abs(strip.widthFor(col, p) - width) > 1) ?? ordered[0];
         this._setProportion(tile, next);
+        if (left)
+            this._placeNow(tile);
+    }
+
+    /** Take the window of a tile out of fullscreen. Returns whether it was in it. */
+    _leaveFullscreen(tile) {
+        if (!tile.win.is_fullscreen())
+            return false;
+        tile.win.unmake_fullscreen();
+        return true;
+    }
+
+    /**
+     * Put a tile at its place without the springs: a window that leaves
+     * fullscreen for another width has that place at once, as one that
+     * leaves it for the width it had (see _onFullscreen).
+     */
+    _placeNow(tile) {
+        if (!tile.target || tile.dead)
+            return;
+        tile.x.set(tile.target.x);
+        tile.y.set(tile.target.y);
+        tile.sync();
+        this.ring.sync();
+    }
+
+    /**
+     * Whether the column of a tile is as wide as it can be, within
+     * FULL_SLACK: the view, or the monitor over a fullscreen window.
+     */
+    _fillsStrip(tile) {
+        const col = tile.column;
+        const strip = tile.strip;
+        const full = strip.widthFor(col, strip.fullProportion, {pinned: true});
+        const width = strip.fits ? col.width : strip.widthFor(col, col.proportion);
+        return full - width <= FULL_SLACK * full;
     }
 
     /**
@@ -5514,10 +5731,9 @@ export class Tiling {
         // fullscreen window.
         const widest = strip.fullProportion;
         const full = strip.widthFor(col, widest, {pinned: true});
-        const width = strip.fits ? col.width : strip.widthFor(col, col.proportion);
         const narrower = p => Number.isFinite(p) && p >= MIN_PROPORTION &&
             full - strip.widthFor(col, p, {pinned: true}) > FULL_SLACK * full;
-        if (full - width <= FULL_SLACK * full) {
+        if (this._fillsStrip(tile)) {
             const presets = this.config.values.layout.presetWidths;
             const target = [
                 col.restore,
@@ -5544,9 +5760,21 @@ export class Tiling {
         this._relayout(tile.strip, tile);
     }
 
+    /**
+     * maximize-column, see _toggleMaximizeColumn(). A fullscreen window
+     * leaves fullscreen for a column as wide as the view.
+     */
     maximizeColumn() {
-        if (this.focusTile)
-            this._toggleMaximizeColumn(this.focusTile);
+        const tile = this.focusTile;
+        if (!tile)
+            return;
+        if (!this._leaveFullscreen(tile)) {
+            this._toggleMaximizeColumn(tile);
+            return;
+        }
+        if (!this._fillsStrip(tile))
+            this._toggleMaximizeColumn(tile);
+        this._placeNow(tile);
     }
 
     toggleFullscreen() {
