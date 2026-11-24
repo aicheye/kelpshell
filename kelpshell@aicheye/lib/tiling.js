@@ -67,6 +67,9 @@ const LATE_TITLE_MS = 2000;
 // A new window of a class that has a float rule keeps its column pending for
 // this long after it is first shown, see Column.pending.
 const PENDING_MS = 400;
+// At the end of that time, a window narrower or lower than this share of
+// the place its column gave it did not take the size, see _refusedSize.
+const REFUSED_SIZE = 0.75;
 
 // Touchpad swipe. Distances are in touchpad units as libinput reports them
 // without acceleration, the same units the shell's own gestures use.
@@ -3122,6 +3125,7 @@ export class Tiling {
         this.strips = new Map();
         this.floating = new Set();     // floated by hand in this session
         this.raised = new Set();       // put over the other windows by layout.above
+        this.refused = new Set();      // did not take the size of a column, see _refusedSize
         this.forced = new Set();       // tiled by hand against the automatic rules
         this._born = new Map();        // window -> ms when it was created
         this._unmapped = new WeakSet();   // new windows the shell has not mapped yet
@@ -3319,6 +3323,7 @@ export class Tiling {
         this.strips.clear();
         this.floating.clear();
         this.raised.clear();
+        this.refused.clear();
         this.forced.clear();
         this._born.clear();
         this._closed = [];
@@ -3372,6 +3377,7 @@ export class Tiling {
             current: current?.win ?? null,
             floating: [...this.floating],
             raised: [...this.raised],
+            refused: [...this.refused],
             forced: [...this.forced],
             lastWidth: this._lastWidth,
             closed: this._closed,
@@ -3530,6 +3536,8 @@ export class Tiling {
             return false;
         if (this.forced.has(win))
             return true;
+        if (this.refused.has(win))
+            return false;
         return !this._looksFloating(win);
     }
 
@@ -3607,6 +3615,65 @@ export class Tiling {
         this._raise(win);
     }
 
+    /**
+     * A window that got a column and turned out not to belong on the strip
+     * leaves it: in the middle of its monitor at the size it has, and over
+     * the other windows if layout.above names its app.
+     *
+     * The title is one way to find out, see _onTitle. It is not enough:
+     * 1Password opens every prompt as a window that can be resized and
+     * maximized, and only Quick Access had a title rule. Its request to
+     * use an SSH key got a column and no always on top (the user,
+     * 2026-11-23: "1passwqord not floating? why and also not on top").
+     * The two signs used here do not need the title: the window stops
+     * allowing a resize (_onResizeable), or it did not take the size of
+     * its column (_settleLater).
+     */
+    _floatLate(win) {
+        if (!this.tiles.has(win))
+            return;
+        this._untrack(win, false, this._isNew(win));
+        this._centre(win);
+        // Out of its column, the client can go back to a size of its own.
+        const until = GLib.get_monotonic_time() / 1000 + PENDING_MS;
+        const id = win.connect('size-changed', () => {
+            if (GLib.get_monotonic_time() / 1000 > until || this.tiles.has(win))
+                win.disconnect(id);
+            else
+                this._centre(win);
+        });
+        this._raise(win);
+    }
+
+    _centre(win) {
+        const frame = win.get_frame_rect();
+        const m = global.display.get_monitor_geometry(win.get_monitor());
+        win.move_frame(true,
+            m.x + Math.round((m.width - frame.width) / 2),
+            m.y + Math.round((m.height - frame.height) / 2));
+    }
+
+    /**
+     * Size limits that arrive after the first configure. A fullscreen tile
+     * allows no resize either and stays a tile, see _shouldTile.
+     */
+    _onResizeable(win) {
+        if (this.tiles.has(win) && !win.is_fullscreen() && !this._shouldTile(win))
+            this._floatLate(win);
+    }
+
+    /**
+     * Whether the window is much smaller than the place its column gave
+     * it: a client that draws at a size of its own whatever it is told.
+     */
+    _refusedSize(tile) {
+        const t = tile.target;
+        if (!t || tile.fullscreen)
+            return false;
+        const f = tile.win.get_frame_rect();
+        return f.width < t.width * REFUSED_SIZE || f.height < t.height * REFUSED_SIZE;
+    }
+
     _watch(win) {
         win.connectObject(
             'configure', (_w, config) => this._onConfigure(win, config),
@@ -3623,6 +3690,7 @@ export class Tiling {
             'notify::maximized-horizontally', () => this._onMaximized(win),
             'notify::maximized-vertically', () => this._onMaximized(win),
             'notify::above', () => this._retile(win),
+            'notify::resizeable', () => this._onResizeable(win),
             'notify::title', () => this._onTitle(win),
             this);
     }
@@ -3871,6 +3939,11 @@ export class Tiling {
             const strip = tile.strip;
             if (tile.dead || !strip || !tile.column?.pending)
                 return GLib.SOURCE_REMOVE;
+            if (this._refusedSize(tile)) {
+                this.refused.add(win);
+                this._floatLate(win);
+                return GLib.SOURCE_REMOVE;
+            }
             tile.column.pending = false;
             // In the middle of the view as far as the strip allows, as any
             // new window: see _onFocus.
@@ -4038,6 +4111,7 @@ export class Tiling {
         this._untrack(win, true);
         this.floating.delete(win);
         this.raised.delete(win);
+        this.refused.delete(win);
         this.forced.delete(win);
         this._born.delete(win);
         this._home.delete(win);
@@ -4059,6 +4133,8 @@ export class Tiling {
                 this.floating.add(win);
             for (const win of (saved.raised ?? []).filter(w => live.has(w)))
                 this.raised.add(win);
+            for (const win of (saved.refused ?? []).filter(w => live.has(w)))
+                this.refused.add(win);
             for (const win of saved.forced.filter(w => live.has(w)))
                 this.forced.add(win);
             this._lastWidth = saved.lastWidth;
