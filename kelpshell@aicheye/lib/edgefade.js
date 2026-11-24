@@ -116,6 +116,7 @@ export class EdgeFade {
         this._wm = wm;
         this._signature = '';
         this._band = null;       // {monitor, x, y, width, height}
+        this._limit = null;      // px, see limit()
     }
 
     enable() {
@@ -195,6 +196,23 @@ export class EdgeFade {
         });
     }
 
+    /**
+     * While the sidebar changes its width, the band is no wider than the
+     * narrower of the two widths the sidebar takes of the monitor, px:
+     * the windows are in the rest of the wider one while they move. null
+     * when the sidebar has its width.
+     *
+     * The work area has the new width from the first frame. With the band
+     * as wide as that at once, the windows that still leave the room of a
+     * sidebar that widens would be blurred and darkened on the way.
+     */
+    limit(px) {
+        if (px === this._limit)
+            return;
+        this._limit = px;
+        this.sync();
+    }
+
     /** Recompute the band from the work area and rebuild it if it changed. */
     sync(force = false) {
         if (!this.actor)
@@ -213,9 +231,10 @@ export class EdgeFade {
             const area = ws.get_work_area_for_monitor(index);
             const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
             const gap = this._wm.config.values.layout.gap * scale;
-            const width = area.x + gap - monitor.x;
+            const room = Math.min(area.x - monitor.x, this._limit ?? Infinity);
+            const width = room + gap;
             // Only where something (the sidebar) reserves the left edge.
-            if (area.x > monitor.x && width > 0) {
+            if (room > 0 && width > 0) {
                 band = {
                     monitor: index,
                     x: monitor.x, y: monitor.y,

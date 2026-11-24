@@ -320,6 +320,10 @@ class Tile {
         // around it at whatever width it has (setTarget). null otherwise.
         this._middle = null;
         this._middleX = null;    // the x last written for it
+        // Where the tile was drawn when the sidebar began to change its
+        // width, while it goes to its new place with the cards: {x, w,
+        // free}, see Tiling.glideBegin. null otherwise.
+        this._glide = null;
         this.target = null;      // place on the strip, screen coordinates
         this.strip = null;
         this.column = null;
@@ -929,6 +933,16 @@ class Tile {
                 this.applyFrame(true);
                 return GLib.SOURCE_REMOVE;
             }
+            // A client that had not answered when the tile arrived with
+            // the sidebar is still drawn at the width of its place, see
+            // Tiling.glideEnd. A frame that is as it was asked for or wider
+            // by now, or was asked for three more times, is the one the
+            // window keeps.
+            if (this._sized && !this._glide &&
+                this.w.target !== visibleRect(this.wm.config, this.win).width) {
+                this._followSize();
+                this.sync();
+            }
             const width = this.win.get_frame_rect().width;
             const c = this.crop;
             const min = width > r.width + 1 ? width - c.left - c.right : 0;
@@ -1100,14 +1114,20 @@ class Tile {
     tick(dt, omega, zeta) {
         if (this.dead)
             return false;
-        this.x.step(dt, omega, zeta);
+        // The sidebar's animation writes the place and the width of a tile
+        // that goes with it, see Tiling.glideStep.
+        const glide = this._glide;
+        const ownX = !glide || glide.free;
+        if (ownX)
+            this.x.step(dt, omega, zeta);
         this.y.step(dt, omega, zeta);
         this.shrink.step(dt, omega, zeta);
-        this.w.step(dt, omega, zeta);
+        if (!glide)
+            this.w.step(dt, omega, zeta);
         this.h.step(dt, omega, zeta);
         this.sync();
-        return !(this.x.atRest && this.y.atRest && this.shrink.atRest &&
-            this.w.atRest && this.h.atRest);
+        return !((!ownX || this.x.atRest) && this.y.atRest && this.shrink.atRest &&
+            (!!glide || this.w.atRest) && this.h.atRest);
     }
 
     /** resetActor is false when the window is closing, so it does not jump. */
@@ -3569,6 +3589,104 @@ export class Tiling {
                 tile._retries = 0;
                 tile.applyFrame(true);
             }
+        }
+    }
+
+    // ---- the sidebar changes its width ----
+    // The sidebar collapses or expands over some frames (Super+B), and the
+    // room it takes from the windows changes with it. The windows go to
+    // their new places in the same frames: the left edge of the first
+    // column stays one gap from the cards all the way.
+    //
+    // The windows are asked for their new frames once, when the cards
+    // start to move. From then on each tile is drawn between where it was
+    // and its new place, by the share of the way the cards have gone, and
+    // at a width between the two the same way. A client takes its new size
+    // some frames later, and the picture of the window is scaled to the
+    // width for that frame, as it is for every other change of width.
+    //
+    // With the frames asked for when the cards have arrived, the cards
+    // moved first and the windows after them. With the tiles on their
+    // springs from the start, they would move at another pace than the
+    // cards, and each would change its width only when its client has
+    // answered: a window would move over first and grow after that.
+
+    /**
+     * The sidebar starts to change its width. change() gives the windows
+     * their new room (the sidebar's strut), and the work areas are read
+     * from it before it returns.
+     */
+    glideBegin(change) {
+        this.glideEnd();
+        const from = new Map();
+        for (const tile of this.tiles.values()) {
+            if (tile.placed && tile.target && tile._sized && !tile.fullscreen && !tile.grabbed) {
+                from.set(tile, {
+                    x: tile.x.value, w: tile.w.value, free: false,
+                    tx: tile.target.x, tw: tile.target.width,
+                });
+            }
+        }
+        change();
+        this.layoutAll(true);
+        for (const [tile, glide] of from) {
+            const t = tile.target;
+            // A tile that keeps its place is left on its springs: one on
+            // another monitor.
+            if (tile.dead || !t || (t.x === glide.tx && t.width === glide.tw))
+                continue;
+            tile._glide = glide;
+        }
+        this.glideStep(0);
+    }
+
+    /** The cards have gone this share of their way, 0 to 1. */
+    glideStep(share) {
+        let moved = false;
+        for (const tile of this.tiles.values()) {
+            const glide = tile._glide;
+            if (!glide)
+                continue;
+            const t = tile.target;
+            if (tile.dead || !t || tile.fullscreen || tile.grabbed) {
+                tile._glide = null;
+                continue;
+            }
+            // A swipe took the strip: the fingers and then the springs
+            // have its place from here on.
+            if (tile.strip?._swipe)
+                glide.free = true;
+            tile._middle = tile._middleX = null;
+            if (!glide.free)
+                tile.x.set(glide.x + (t.x - glide.x) * share);
+            tile.w.set(glide.w + (t.width - glide.w) * share);
+            tile.sync();
+            moved = true;
+        }
+        if (moved)
+            this.ring?.sync();
+    }
+
+    /**
+     * The cards have arrived, or stopped on the way. Every tile goes on
+     * from where it is drawn now, on its springs: to its place, and to the
+     * width its frame has.
+     */
+    glideEnd() {
+        for (const tile of this.tiles.values()) {
+            if (!tile._glide)
+                continue;
+            tile._glide = null;
+            if (tile.dead || !tile.target)
+                continue;
+            tile.x.target = tile.target.x;
+            // A client that has not taken its new size yet keeps the width
+            // the tile is drawn at, until it has (size-changed), or until
+            // the check of its width. On the spring now, the window would
+            // go back towards its old width first.
+            if (tile._fits())
+                tile._followSize();
+            this.animator.add(tile);
         }
     }
 

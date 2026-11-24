@@ -35,7 +35,7 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 - **System**: processor, memory, disk space, disk activity and network.
 - **Status**: network, Bluetooth, battery and volume. A click opens quick settings, a secondary click on the volume icon lists the output devices.
 
-`Super+B` collapses the sidebar to a strip of icons. It hides while a window is fullscreen.
+`Super+B` collapses the sidebar to a strip of icons, and the windows move over with it. It hides while a window is fullscreen.
 
 ![The sidebar collapsed to icons, with two windows stacked in the first column](docs/screenshots/collapsed.png)
 

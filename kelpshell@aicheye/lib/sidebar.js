@@ -3303,8 +3303,10 @@ export class Sidebar {
         this.collapsed = state?.collapsed ?? this.config.values.sidebar.collapsed;
 
         // An empty actor that reserves the screen edge. It is resized in one
-        // step, so windows are laid out once per toggle and not on every
-        // frame of the card animation.
+        // step, when the cards start to change their width, so the windows
+        // are asked for a new size once per toggle and not on every frame
+        // of the card animation. They are drawn at their new places as far
+        // as the cards have gone, see Tiling.glideBegin.
         this._strut = new St.Widget({reactive: false});
         this._strutWidth = 0;    // the width it has with no fullscreen window
         this._lifted = false;    // it has no width now, see _placeStrut
@@ -3328,7 +3330,7 @@ export class Sidebar {
         // the fingers, and goes to its target on the spring of the windows.
         this._peekPos = new Spring();
         // The width of the cards while they collapse or expand:
-        // {from, to, elapsed, step, done}, see reposition().
+        // {from, to, elapsed, most, step, done}, see reposition().
         //
         // The animation plays COLLAPSE_MS of frames, however long each
         // frame took. Its time starts once the cards have been laid out
@@ -3348,10 +3350,13 @@ export class Sidebar {
                 const a = this._widening;
                 if (!a || !this.actor)
                     return false;
-                a.elapsed += Math.min(dt * 1000, a.step);
+                a.elapsed += Math.min(dt * 1000, a.most);
                 const t = Math.min(1, a.elapsed / COLLAPSE_MS);
                 // The curve of Clutter.AnimationMode.EASE_OUT_CUBIC.
-                this.actor.width = a.from + (a.to - a.from) * (1 - (1 - t) ** 3);
+                const share = 1 - (1 - t) ** 3;
+                this.actor.width = a.from + (a.to - a.from) * share;
+                // The windows go the same share of their way.
+                a.step?.(share);
                 if (t < 1)
                     return true;
                 this._widening = null;
@@ -3497,7 +3502,10 @@ export class Sidebar {
             card.destroy();
         Main.layoutManager.removeChrome(this.actor);
         this.tiling.animator?.remove(this._widthItem);
+        if (this._widening)
+            this.tiling.glideEnd?.();
         this._widening = null;
+        this.tiling.fade?.limit(null);
         Main.layoutManager.removeChrome(this._strut);
         if (this._roomId)
             global.compositor.get_laters().remove(this._roomId);
@@ -3635,38 +3643,61 @@ export class Sidebar {
         this.actor.height = monitor.height;
         this.actor.remove_all_transitions();
         // The strut is the room the windows leave for the cards. It takes
-        // its new width once the cards have theirs, so the windows are
-        // asked for a new size after the collapse animation and not during
-        // it.
+        // its new width in one step, and the windows are asked for their
+        // new size then. In an animation that is when the cards start to
+        // move, and the windows are drawn going to their new places as the
+        // cards go to their width, see Tiling.glideBegin.
         // The cards' shadows end EDGE px before the windows start, where
-        // the room between the two leaves the shadows faint by then. While
-        // the cards get narrower the cut stays where it was, until the
-        // windows have their new place.
+        // the room between the two leaves the shadows faint by then. The
+        // cut goes with the cards, as the windows do.
         const scale = scaleFactor();
         const room = (this.config.values.layout.gap - EDGE) * scale;
         const edgeFor = w => room >= 6 * scale ? w + room : null;
-        this.actor.setEdge(edgeFor(Math.max(this.actor.width, width)));
-        const setStrut = () => {
-            this._strutWidth = width;
-            this._placeStrut();
-            this.actor.setEdge(edgeFor(width));
-        };
+        const fade = this.tiling.fade;
         const animator = this.tiling.animator;
         animator.remove(this._widthItem);
+        // Stopped on the way, by a second press of the key: the windows
+        // stay where they are drawn, as the cards do, until the next
+        // animation takes both from there. On their springs they would go
+        // on to the places they were given while the cards stand still
+        // (47 px under the cards in the 80 ms before the cards turn back).
+        const stopped = this._widening !== null;
         this._widening = null;
         if (animate && animator.enabled && this.actor.width !== width) {
             const rate = this.actor.peek_stage_views()[0]?.get_refresh_rate() || 60;
+            this.actor.setEdge(edgeFor(this.actor.width));
             const a = this._widening = {
                 from: this.actor.width, to: width, elapsed: 0,
-                step: COLLAPSE_STEP_FRAMES * 1000 / rate, done: setStrut,
+                most: COLLAPSE_STEP_FRAMES * 1000 / rate,
+                step: null,
+                done: () => {
+                    this.actor.setEdge(edgeFor(width));
+                    this.tiling.glideEnd();
+                    fade?.limit(null);
+                },
             };
             afterSettle(this.actor, () => {
-                if (this._widening === a)
-                    animator.add(this._widthItem);
+                if (this._widening !== a)
+                    return;
+                fade?.limit(Math.min(this._strutWidth, width));
+                this.tiling.glideBegin(() => {
+                    this._strutWidth = width;
+                    this._placeStrut(true);
+                });
+                a.step = share => {
+                    this.actor.setEdge(edgeFor(this.actor.width));
+                    this.tiling.glideStep(share);
+                };
+                animator.add(this._widthItem);
             });
         } else {
             this.actor.width = width;
-            setStrut();
+            this._strutWidth = width;
+            this._placeStrut();
+            this.actor.setEdge(edgeFor(width));
+            fade?.limit(null);
+            if (stopped)
+                this.tiling.glideEnd();
         }
         // The transitions were removed above, and the width may have changed.
         this._covered = null;
@@ -3683,17 +3714,19 @@ export class Sidebar {
      * they have with the strut, see Strip.area in lib/tiling.js.
      *
      * The shell reads the size of its struts when an actor's allocation
-     * changes. This strut is hidden under a fullscreen window and gets
-     * none, so the shell is asked to read them here.
+     * changes, before the next frame. This strut is hidden under a
+     * fullscreen window and gets none, so the shell is asked to read them
+     * here. now: it is asked in any case, so the work areas have the new
+     * width when this returns.
      */
-    _placeStrut() {
+    _placeStrut(now = false) {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor || !this._strut)
             return;
         const lifted = global.display.get_monitor_in_fullscreen(monitor.index);
         this._strut.set_position(monitor.x, monitor.y);
         this._strut.set_size(lifted ? 0 : this._strutWidth, monitor.height);
-        if (lifted !== this._lifted) {
+        if (lifted !== this._lifted || now) {
             this._lifted = lifted;
             Main.layoutManager._updateRegions?.();
         }
