@@ -4,6 +4,8 @@ A GNOME Shell extension that replaces the top bar with a sidebar and arranges wi
 
 ![The Kelpshell desktop: a sidebar of cards on the left and three window columns, the middle one in focus](docs/screenshots/desktop.png)
 
+[Watch the one-minute showcase video](docs/showcase.mp4)
+
 ## Overview
 
 Kelpshell changes how the GNOME desktop is laid out and keeps GNOME's apps, settings and session. It provides:
