@@ -6,7 +6,6 @@
 // middle of a move continues smoothly. Clutter's ease() restarts from rest.
 
 import Clutter from 'gi://Clutter';
-import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 const REST_DISTANCE = 0.4;   // px
@@ -68,13 +67,33 @@ export class Spring {
     }
 }
 
-/** Calls tick(dt) on registered objects once per frame while any is active. */
+/**
+ * Calls tick(dt) on registered objects once per frame while any is active.
+ *
+ * dt is the time between two frames as the frame clock has it: a whole
+ * number of frame times of the monitor, one, or more when the shell has
+ * left frames out. It is not the time since the tick before, read from the
+ * clock when the tick runs. The frames of a monitor are shown the same time
+ * apart, and Mutter does not start its work for them the same time apart:
+ * on a 120 Hz panel one tick in ten ran more than a quarter of a frame time
+ * early or late, between 2 and 16 ms after the one before where the frames
+ * were 8.3 ms apart (measured over 766 ticks). With the time of the clock,
+ * a window that slides to its place moves twice as far in such a frame as
+ * in the ones around it and next to nothing in the frame after.
+ *
+ * The frame clock tells the time between two frames in whole ms. Within 1
+ * ms of a whole number of frame times it is taken as that number. Any
+ * other time is taken as it is: frames are not a frame time apart on a
+ * monitor with a variable refresh rate that follows a window, and a
+ * virtual monitor has been seen to show a frame every 8 ms at 144 Hz.
+ * Counted as one frame time each, those slides took 15% longer.
+ */
 export class Animator {
     constructor(config) {
         this._config = config;
         this._items = new Set();
         this._timeline = null;
-        this._last = 0;
+        this._steps = 0;
     }
 
     get omega() {
@@ -108,7 +127,7 @@ export class Animator {
     add(item) {
         this._items.add(item);
         if (this._timeline && !this._timeline.is_playing()) {
-            this._last = GLib.get_monotonic_time();
+            this._steps = 0;
             this._timeline.start();
         }
     }
@@ -118,9 +137,17 @@ export class Animator {
     }
 
     _tick() {
-        const now = GLib.get_monotonic_time();
-        const dt = Math.min(0.05, Math.max(0.001, (now - this._last) / 1e6));
-        this._last = now;
+        const timeline = this._timeline;
+        const frame = 1000 / (timeline.frame_clock?.get_refresh_rate() || 60);
+        const delta = timeline.get_delta();
+        const frames = Math.max(1, Math.round(delta / frame));
+        let ms = delta;
+        // The first tick has no tick before it.
+        if (this._steps++ === 0)
+            ms = frame;
+        else if (Math.abs(delta - frames * frame) <= 1)
+            ms = frames * frame;
+        const dt = Math.min(0.05, Math.max(0.001, ms / 1000));
         const omega = this.omega;
         const zeta = this.zeta;
         for (const item of this._items) {
