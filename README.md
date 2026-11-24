@@ -127,7 +127,7 @@ Everything follows the style chosen in Settings > Appearance, the shell's own po
 
 During a swipe, the minimap's highlights of the active workspace and of the focused window move with the fingers. Between two workspaces their rows change with them too: the icons grow and shrink, and the title line opens and closes.
 
-Two-finger scrolling is evened out between toolkits, so GTK, Firefox and Chromium windows scroll the same distance for the same movement.
+Two-finger scrolling is evened out between toolkits, so GTK, Firefox, Chromium and Visual Studio Code windows scroll the same distance for the same movement.
 
 ## Keybindings
 

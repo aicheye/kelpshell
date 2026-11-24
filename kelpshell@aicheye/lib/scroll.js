@@ -16,6 +16,15 @@
 // A unit is one unit of wl_pointer.axis, which is what libinput reports for
 // the fingers.
 //
+// Visual Studio Code is Chromium, and its editor, lists and terminal do not
+// scroll as a Chromium page does. They take the whole number of px
+// Chromium would move for an event, with what is after the point cut off,
+// and move by 50/120 of that, rounded up to a whole px (measured in Code
+// 1.147: an event of 12 px moves the editor 5 px, one of 7.3 px moves it 3
+// px, one of 1 px or less moves nothing). Sent what a Chromium page is
+// sent, the editor moves 42% as far, and not at all for the slow events at
+// the start and the end of a scroll. See _send() for what it is sent.
+//
 // Nothing in GTK or Chromium sets these, so it is done here, between the
 // touchpad and the windows. The native module (native/scroll.c) hands every
 // touchpad scroll event to this file before a window gets it, and sends
@@ -113,11 +122,13 @@ const LOG_GESTURES = 40;
 const IDLE_MS = 150;
 
 // px a window moves for one unit of wl_pointer.axis, by toolkit. own: the
-// window goes on after the fingers as Firefox does, by itself.
+// window goes on after the fingers as Firefox does, by itself. wheel: the
+// window moves by whole px, one for this many px of a Chromium page.
 const TOOLKITS = {
     firefox: {px: 4, own: true},
     gtk4: {px: 2.5},
     chromium: {px: 12},
+    code: {px: 12, wheel: 120 / 50},
 };
 // What a process has mapped tells its toolkit. In this order: Chromium and
 // Firefox both use GTK for their menus and dialogs.
@@ -129,6 +140,9 @@ const MAPPED = [
 // GTK 4 windows that scroll by a count of their own and not by the px of
 // GTK's scrolled window: terminals. They are left as they are.
 const OWN_SCROLLING = /ghostty|ptyxis|kgx|console|terminal|kitty|alacritty|foot/i;
+// Chromium windows that scroll as the editor of Visual Studio Code does: Code
+// and what is built from it.
+const CODE = /vscode|vscodium|codium|code-oss|code-insiders|(^| )code( |$)|cursor|windsurf/i;
 
 const FINGER = Clutter.ScrollSource.FINGER;
 const BOTH_AXES = Clutter.ScrollFinishFlags.HORIZONTAL | Clutter.ScrollFinishFlags.VERTICAL;
@@ -321,6 +335,8 @@ export class Scroll {
         const name = this._byPid.get(pid);
         if (name === 'gtk4' && OWN_SCROLLING.test(names))
             return null;
+        if (name === 'chromium' && CODE.test(names))
+            return TOOLKITS.code;
         return TOOLKITS[name] ?? null;
     }
 
@@ -759,19 +775,34 @@ export class Scroll {
      * into the next. Each is a fiftieth of a px over the whole number: on
      * its way through Xwayland the number comes out a little under now and
      * then, and Chromium then drops a whole px.
+     *
+     * A toolkit with wheel (Visual Studio Code) moves by whole px too,
+     * and by one for every toolkit.wheel px of a Chromium page, rounded up.
+     * Its window gets the event of the most px for which it moves the whole
+     * px wanted: for 3 px that is 7 px of a page, which it takes as
+     * ceil(7 / 2.4) = 3. What is left of the px wanted goes into the next
+     * event, so the distance is that of the others at any speed. The event
+     * is a quarter px over the whole number: the window cuts off what is
+     * after the point, and two events it takes as one are then cut to the
+     * sum of their whole numbers.
      */
     _send(window, toolkit, dx, dy, x, y, modifiers, timeUs) {
-        if (window.get_client_type() === Meta.WindowClientType.X11) {
+        const wheel = toolkit.wheel ?? 0;
+        if (wheel || window.get_client_type() === Meta.WindowClientType.X11) {
             const px = toolkit.px * 10;
             let carry = this._carry;
             if (carry?.window !== window)
                 carry = this._carry = {window, x: 0, y: 0};
             const wholeX = Math.trunc(dx * px + carry.x);
             const wholeY = Math.trunc(dy * px + carry.y);
-            const sentX = wholeX + Math.sign(wholeX) * 0.02;
-            const sentY = wholeY + Math.sign(wholeY) * 0.02;
-            carry.x += dx * px - sentX;
-            carry.y += dy * px - sentY;
+            // px of a Chromium page for the whole px n.
+            const page = n => wheel
+                ? Math.sign(n) * (Math.ceil(Math.round(Math.abs(n) * wheel * 1000) / 1000) - 1 + 0.25)
+                : n + Math.sign(n) * 0.02;
+            const sentX = page(wholeX);
+            const sentY = page(wholeY);
+            carry.x += dx * px - (wheel ? wholeX : sentX);
+            carry.y += dy * px - (wheel ? wholeY : sentY);
             if (wholeX === 0 && wholeY === 0)
                 return;
             dx = sentX / px;

@@ -87,7 +87,8 @@
     "speed": 1,              // touchpad scroll distance, as a factor on what the touchpad reports. 0.2 = a fifth
     "likeFirefox": true,     // every window scrolls as far, and goes on as long after the fingers, as Firefox. false: each toolkit as it is
     // Windows whose toolkit is not recognized, by wm_class substring:
-    // {"match": "name", "toolkit": "firefox" | "gtk4" | "chromium" | "none"}
+    // {"match": "name", "toolkit": "firefox" | "gtk4" | "chromium" | "code" | "none"}
+    // "code": scrolls as the editor of Visual Studio Code does. Code is recognized by itself
     "apps": [],
     "log": false             // write the touchpad's reports and what the windows were sent, for the last 40 scrolls, to ~/.cache/kelpshell/scroll-log.json
   },

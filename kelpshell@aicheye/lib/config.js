@@ -80,7 +80,7 @@ export const DEFAULTS = {
         speed: 1,             // touchpad scroll distance, as a factor on what the touchpad reports
         likeFirefox: true,    // every window scrolls as far, and goes on as long, as Firefox
         // Windows whose toolkit is not found by itself, by wm_class substring:
-        // {match: 'name', toolkit: 'firefox' | 'gtk4' | 'chromium' | 'none'}.
+        // {match: 'name', toolkit: 'firefox' | 'gtk4' | 'chromium' | 'code' | 'none'}.
         apps: [],
         log: false,           // write what the touchpad sent and what the windows were sent to ~/.cache/kelpshell/scroll-log.json
     },
