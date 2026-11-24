@@ -26,6 +26,10 @@ const STARTUP_MS = 500;
 // px between the edges of a tiled window and the edges of a banner over it.
 const BANNER_INSET = 12;
 
+// Touchpad units of a three-finger swipe that slide the workspaces by one.
+// The shell's own length is 300 (TOUCHPAD_BASE_HEIGHT in swipeTracker.js).
+const WORKSPACE_SWIPE_UNITS = 360;
+
 const BANNER_ALIGN = {
     left: Clutter.ActorAlign.START,
     center: Clutter.ActorAlign.CENTER,
@@ -391,6 +395,14 @@ export class Tweaks {
      * is connected through a filter that keeps four-finger swipes from it
      * while they open the launcher (gestures.launcherSwipe).
      *
+     * The shell's gesture tells its tracker how far the fingers moved and
+     * that 300 touchpad units are one workspace, in the last argument of
+     * its 'update' and 'end' signals. While the workspaces are stacked the
+     * gesture's emit() puts WORKSPACE_SWIPE_UNITS there, so the same
+     * movement slides the workspaces 300 / WORKSPACE_SWIPE_UNITS as far.
+     * The tracker's time for the rest of the way after the fingers lift is
+     * in proportion to that length.
+     *
      * how is 'vertical', 'detached', or 'stock' for the shell's own
      * connection.
      */
@@ -401,6 +413,7 @@ export class Tweaks {
             return;
         this._workspaceGesture = how;
         global.stage.disconnectObject(gesture);
+        delete gesture.emit;
         if (how === 'detached')
             return;
         const handle = gesture._handleEvent.bind(gesture);
@@ -411,6 +424,12 @@ export class Tweaks {
         global.stage.connectObject('event::touchpad', (actor, event) =>
             this._isLauncherSwipe(event) ? Clutter.EVENT_PROPAGATE : handle(actor, event),
         gesture);
+        const emit = gesture.emit;
+        gesture.emit = (name, ...args) => {
+            if (name === 'update' || name === 'end')
+                args[args.length - 1] = WORKSPACE_SWIPE_UNITS;
+            return emit.call(gesture, name, ...args);
+        };
         tracker.orientation = Clutter.Orientation.VERTICAL;
     }
 
