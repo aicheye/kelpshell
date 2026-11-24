@@ -461,6 +461,13 @@ const EaseList = GObject.registerClass({
 // one it had when the target changed (from) and the one the target has now,
 // by progress. The target is a new actor after every rebuild: key tells
 // whether it stands for the same workspace or window as the one before.
+//
+// During a three-finger swipe, and while the workspaces slide, the mark is
+// held between two actors of the list by the share of the way the swipe has
+// gone (hold), so it moves with the fingers and with the windows. The
+// workspace and the focus change only when the fingers lift or later: a
+// mark that waits for its target would stand still for the whole swipe and
+// move after it.
 const Mark = GObject.registerClass({
     Properties: {
         'progress': GObject.ParamSpec.double('progress', 'progress', 'progress',
@@ -473,6 +480,46 @@ const Mark = GObject.registerClass({
         this.key = null;
         this.from = null;   // [x, y, width, height] in the list
         this.box = null;    // where it was put by the last layout
+        this.pair = null;   // [a, b, share]: held between two actors, see hold()
+    }
+
+    /** Between two actors of the list, share of the way from a to b, whatever the target is. */
+    hold(a, b, share) {
+        for (const actor of [a, b]) {
+            if (this.pair?.includes(actor))
+                continue;
+            actor.connect('destroy', () => {
+                if (this.pair?.includes(actor))
+                    this.pair = null;
+            });
+        }
+        this.pair = [a, b, share];
+        this.get_parent()?.queue_relayout();
+    }
+
+    /**
+     * No longer held. The mark stays where it is until settle(), or until
+     * moveTo() sends it to a new target from there. Returns whether it was
+     * held.
+     */
+    release() {
+        if (!this.pair)
+            return false;
+        this.pair = null;
+        this.remove_transition('progress');
+        this.from = this.box;
+        this.progress = this.box ? 0 : 1;
+        return true;
+    }
+
+    /** From where release() left it to its target over ROW_MS, unless it is on its way already. */
+    settle() {
+        if (this.progress >= 1 || this.get_transition('progress'))
+            return;
+        this.ease_property('progress', 1, {
+            duration: ROW_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        });
     }
 
     get progress() {
@@ -565,7 +612,12 @@ class KelpMarkedList extends St.Viewport {
             const to = mark.target ? this._place(mark.target) : null;
             // With no target it fades out where it is.
             let at = mark.box ?? [0, 0, 0, 0];
-            if (to) {
+            const a = mark.pair ? this._place(mark.pair[0]) : null;
+            const b = mark.pair ? this._place(mark.pair[1]) : null;
+            if (a && b) {
+                // Held by a swipe, see Mark.hold().
+                at = a.map((v, i) => v + (b[i] - v) * mark.pair[2]);
+            } else if (to) {
                 const t = mark.progress;
                 at = mark.from && t < 1 ? mark.from.map((v, i) => v + (to[i] - v) * t) : to;
             }
@@ -988,6 +1040,8 @@ class Minimap {
 
         this._preview = new Preview(sidebar);
         this._tiling.onChanged(() => this.queueRebuild());
+        this._settleId = 0;
+        this._tiling.onBetween(() => this._syncBetween());
         Main.layoutManager.connectObject('monitors-changed', () => this.queueRebuild(), this);
         this._rebuild();
     }
@@ -1138,6 +1192,8 @@ class Minimap {
             focused ??= row._slots?.find(slot => slot.win === focus)?.cell ?? null;
         this._marked.rowMark.moveTo(rows[active] ?? null, active, ease);
         this._marked.cellMark.moveTo(focused, focus?.get_id(), ease);
+        // A swipe that holds a fill holds it between the new rows.
+        this._syncBetween();
         // The title line closes when the focus leaves the windows of the
         // active workspace, and opens when it comes back. It starts from the
         // height the line of the same workspace had, with the title that
@@ -1148,6 +1204,62 @@ class Minimap {
         if (this._active !== undefined && this._active !== active && !this._collapsed)
             this._arrive(this._rows.get_child_at_index(active));
         this._active = active;
+    }
+
+    /**
+     * A swipe has the workspaces or the windows between two of them, or
+     * has ended (Tiling.between). While it lasts, the fill of the active
+     * workspace lies between the rows of the two workspaces, and the fill
+     * of the focused window between the icons of the two windows.
+     *
+     * When it ends, the rows are built for the new workspace or focus at
+     * once, where that is queued, and the fills go on from where they are
+     * to their new places. Left to the idle callback, that came 50 ms
+     * after the fingers had lifted (measured), with the windows on their
+     * way and the fill at rest. A fill that has no new place goes back to
+     * its own from an idle callback: sent on at once in every case, it
+     * would start back towards the window the swipe began on before the
+     * rows are built, and turn round.
+     */
+    _syncBetween() {
+        if (this._destroyed)
+            return;
+        const {workspaces, windows} = this._tiling.between;
+        const rows = this._rows.get_children();
+        const cellOf = win => {
+            for (const row of rows) {
+                const cell = row._slots?.find(slot => slot.win === win)?.cell;
+                if (cell)
+                    return cell;
+            }
+            return null;
+        };
+        let ended = false;
+        const place = (mark, a, b, share) => {
+            if (a && b)
+                mark.hold(a, b, share);
+            else if (mark.release())
+                ended = true;
+        };
+        place(this._marked.rowMark,
+            workspaces && rows[workspaces[0]], workspaces && rows[workspaces[1]], workspaces?.[2]);
+        place(this._marked.cellMark,
+            windows && cellOf(windows[0]), windows && cellOf(windows[1]), windows?.[2]);
+        if (!ended)
+            return;
+        if (this._idleId && !this._dragging) {
+            GLib.source_remove(this._idleId);
+            this._idleId = 0;
+            this._rebuild();
+        }
+        // After a rebuild that is queued later: an idle of a lower
+        // priority than the one of queueRebuild().
+        this._settleId ||= GLib.idle_add(GLib.PRIORITY_LOW, () => {
+            this._settleId = 0;
+            this._marked.rowMark.settle();
+            this._marked.cellMark.settle();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     /**
@@ -1690,6 +1802,9 @@ class Minimap {
         if (this._idleId)
             GLib.source_remove(this._idleId);
         this._idleId = 0;
+        if (this._settleId)
+            GLib.source_remove(this._settleId);
+        this._settleId = 0;
         this._insert?.destroy();
         this._insert = null;
         this._dropRow = null;

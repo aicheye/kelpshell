@@ -1979,6 +1979,67 @@ class Strip {
             s.history.shift();
         this._swipeStep(s);
         this._swipePlace(s);
+        this._swipeBetween(s);
+    }
+
+    /**
+     * Tell where the swipe has the strip, for the minimap: between the
+     * window that had the focus when it began and the one of the column
+     * after or before it, see Tiling.between.
+     *
+     * A neighbour that is whole in the view takes the focus once the
+     * fingers have travelled SWIPE_STEP_SHARE of the view (_swipeStep),
+     * and the share is the part of that travel done. Any other neighbour
+     * has to scroll into the view, and the share is the part of that
+     * scrolling done. From there it goes on to the column after it the
+     * same way. At an end of the strip the view scrolls no further, and
+     * neither does the share: a column that scrolling cannot bring in is
+     * not one the swipe goes to.
+     *
+     * By the travel of the fingers alone, a long swipe on a strip that can
+     * scroll by one column would count two columns, and come back to the
+     * first when the fingers lift (measured: the fill went to the third
+     * icon and returned to the second).
+     */
+    _swipeBetween(s) {
+        const win = col => (col?.active ?? col?.tiles[0])?.win ?? null;
+        const tell = (from, to, share) => {
+            const a = win(from);
+            const b = win(to);
+            this.wm.setBetween('windows', a && b ? [a, b, share] : null);
+        };
+        let at = this.columns.indexOf(s.from);
+        if (at < 0 || !this.wm.isActiveStrip(this)) {
+            this.wm.setBetween('windows', null);
+            return;
+        }
+        const dir = Math.sign(s.raw - s.base);
+        const near = this._swipeNeighbour(s, dir);
+        if (near) {
+            const limit = Math.max(1, s.viewW * SWIPE_STEP_SHARE);
+            tell(s.from, near, clamp(Math.abs(s.raw - s.base) / limit, 0, 1));
+            return;
+        }
+        const [lo, hi] = this._scrollRange(s.viewW);
+        const pos = clamp(s.raw, lo, hi);
+        let base = s.base;
+        for (;;) {
+            const col = this.columns[at];
+            const next = dir ? this.columns[at + dir] : null;
+            const to = next && !next.pending ? this._scrollTo(next, s.viewW, base) : base;
+            const whole = (to - base) * dir;
+            const done = (pos - base) * dir;
+            if (whole < 1) {
+                tell(col, col, 0);
+                return;
+            }
+            if (done < whole) {
+                tell(col, next, Math.max(0, done) / whole);
+                return;
+            }
+            base = to;
+            at += dir;
+        }
     }
 
     swipeEnd(timeMs, cancelled = false) {
@@ -2446,6 +2507,15 @@ class Strip {
         while (s.history.length > 2 && timeMs - s.history[0].time > SWIPE_VELOCITY_MS)
             s.history.shift();
         this._coverDraw(s.plan, Math.abs(s.travel));
+        // For the minimap: between the window that has the focus and the
+        // one that takes it when the fingers lift, by the share of the way
+        // that window has come in or the other has left.
+        const plan = s.plan;
+        const kinds = {in: plan?.tile, focus: plan?.tile, out: plan?.to};
+        const to = plan ? kinds[plan.kind] ?? null : null;
+        const from = this.focus;
+        this.wm.setBetween('windows', to && from && plan.reach > 0 && this.wm.isActiveStrip(this)
+            ? [from.win, to.win, clamp(Math.abs(s.travel) / plan.reach, 0, 1)] : null);
     }
 
     /**
@@ -3206,6 +3276,10 @@ export class Tiling {
         this.config = config;
         this.animator = animator;
         this._listeners = new Set();
+        // Where a swipe or a slide of the workspaces is, see setBetween().
+        this.between = {windows: null, workspaces: null};
+        this._betweenListeners = new Set();
+        this._slide = null;            // the MonitorGroup the shell slides the workspaces in
         this.glass = null;
     }
 
@@ -3488,6 +3562,72 @@ export class Tiling {
     _changed() {
         for (const fn of this._listeners)
             fn();
+    }
+
+    // ---- where a swipe is, used by the minimap ----
+    // The minimap has a fill behind the active workspace and one behind
+    // the icon of the focused window. A swipe changes the workspace or the
+    // focus when the fingers lift, or later, so fills that move when those
+    // change would stand still for the whole swipe and move after it.
+    //
+    // this.between tells where the swipe is while it lasts:
+    //   windows: [from, to, share], two Meta.Windows, or null
+    //   workspaces: [from, to, share], two workspace indices, or null
+    // share is 0 at from and 1 at to.
+
+    onBetween(fn) {
+        this._betweenListeners.add(fn);
+    }
+
+    setBetween(what, value) {
+        if (value === null && this.between[what] === null)
+            return;
+        this.between[what] = value;
+        for (const fn of this._betweenListeners)
+            fn();
+    }
+
+    /**
+     * The shell slides the workspaces of the primary monitor in group, a
+     * MonitorGroup. While the fingers of a swipe do that, and when it goes
+     * on by itself after they have lifted, its progress is told as the two
+     * workspaces it is between, until the group is destroyed.
+     *
+     * Not for a slide after a key. The workspace changes before that
+     * slide, so the rows of the minimap change their heights during it,
+     * and a fill held between two rows that move goes 12 px past its place
+     * and back (measured). The fill goes to its row by itself there, in
+     * the time the rows take.
+     */
+    _followSlide(group) {
+        this._slide = group;
+        const update = () => {
+            if (this._slide !== group)
+                return;
+            const animation = Main.wm._workspaceAnimation;
+            const swiped = animation?._swipeTracker?._state === 1 ||
+                animation?._switchData?.gestureActivated === true;
+            if (!swiped)
+                return;
+            const points = (group._workspaceGroups ?? [])
+                .filter(g => g.workspace)
+                .map(g => ({index: g.workspace.index(), at: group.getWorkspaceProgress(g.workspace)}))
+                .sort((a, b) => a.at - b.at);
+            if (points.length === 0)
+                return;
+            const p = group.progress;
+            const a = points.findLast(point => point.at <= p) ?? points[0];
+            const b = points.find(point => point.at >= p) ?? points.at(-1);
+            const share = b.at > a.at ? clamp((p - a.at) / (b.at - a.at), 0, 1) : 0;
+            this.setBetween('workspaces', [a.index, b.index, share]);
+        };
+        group.connect('notify::progress', update);
+        group.connect('destroy', () => {
+            if (this._slide !== group)
+                return;
+            this._slide = null;
+            this.setBetween('workspaces', null);
+        });
     }
 
     // ---- strips ----
@@ -5028,6 +5168,7 @@ export class Tiling {
             // A swipe whose end never arrived.
             this._swipe?.strip?.swipeEnd(event.get_time(), true);
             this._swipe = null;
+            this.setBetween('windows', null);
             if (this.config.values.gestures.swipeScroll &&
                 event.get_touchpad_gesture_finger_count() >= SWIPE_FINGERS &&
                 Main.actionMode === Shell.ActionMode.NORMAL)
@@ -5066,6 +5207,9 @@ export class Tiling {
         if (!s.strip)
             return Clutter.EVENT_PROPAGATE;
         s.strip.swipeEnd(event.get_time(), phase === Clutter.TouchpadGesturePhase.CANCEL);
+        // After the focus has changed: the minimap then knows where its
+        // fill goes from the place the fingers left it at.
+        this.setBetween('windows', null);
         return Clutter.EVENT_STOP;
     }
 
@@ -5130,6 +5274,8 @@ export class Tiling {
             init.call(this, monitor, ...rest);
             try {
                 decorateSwitch(this, monitor, tiling.fade, tiling.glass);
+                if (monitor.index === Main.layoutManager.primaryIndex)
+                    tiling._followSlide(this);
             } catch (e) {
                 console.error(e);
             }

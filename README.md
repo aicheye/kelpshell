@@ -125,6 +125,8 @@ Everything follows the style chosen in Settings > Appearance, the shell's own po
 | Four fingers up or down | Open or close the launcher |
 | Three fingers sideways over a fullscreen window | Bring the next window, or the sidebar, in over it |
 
+During a swipe, the minimap's highlights of the active workspace and of the focused window move with the fingers.
+
 Two-finger scrolling is evened out between toolkits, so GTK, Firefox and Chromium windows scroll the same distance for the same movement.
 
 ## Keybindings
