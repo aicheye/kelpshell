@@ -3668,11 +3668,7 @@ export class Tiling {
             win.get_window_type() !== Meta.WindowType.NORMAL || isHelper(win) ||
             win.get_transient_for() || win.is_fullscreen() || !this._looksFloating(win))
             return;
-        const frame = win.get_frame_rect();
-        const m = global.display.get_monitor_geometry(win.get_monitor());
-        win.move_frame(true,
-            m.x + Math.round((m.width - frame.width) / 2),
-            m.y + Math.round((m.height - frame.height) / 2));
+        this._centre(win);
     }
 
     /** Size and centre a window that has just left the strip. */
@@ -3698,7 +3694,8 @@ export class Tiling {
             return;
         if (this._shouldTile(win))
             return;
-        const area = tile.strip.area;
+        const area = this._opensOnPrimary(win)
+            ? this._stripOn(global.display.get_primary_monitor()).area : tile.strip.area;
         this._untrack(win, false, true);
         this._placeFloating(win, area);
         this._raise(win);
@@ -3734,12 +3731,43 @@ export class Tiling {
         this._raise(win);
     }
 
+    /** Put a window in the middle of the monitor it opens on. */
     _centre(win) {
         const frame = win.get_frame_rect();
-        const m = global.display.get_monitor_geometry(win.get_monitor());
+        const monitor = this._opensOnPrimary(win)
+            ? global.display.get_primary_monitor() : win.get_monitor();
+        const m = global.display.get_monitor_geometry(monitor);
         win.move_frame(true,
             m.x + Math.round((m.width - frame.width) / 2),
             m.y + Math.round((m.height - frame.height) / 2));
+    }
+
+    /** Whether the class of a window contains one of the names of a layout list. */
+    _named(win, names) {
+        const cls = (win.get_wm_class() ?? '').toLowerCase();
+        return !!cls && Array.isArray(names) &&
+            names.some(p => String(p) && cls.includes(String(p).toLowerCase()));
+    }
+
+    /**
+     * layout.onPrimary: a window of one of these apps that is not on the
+     * strip opens on the primary monitor, whichever monitor has the focus.
+     * A prompt of 1Password is then always in the same place. A window
+     * that belongs to another one stays with it.
+     */
+    _opensOnPrimary(win) {
+        return !win.get_transient_for() &&
+            this._named(win, this.config.values.layout.onPrimary);
+    }
+
+    /** Move a new window of layout.onPrimary that is off the strip to the primary monitor. */
+    _bringToPrimary(win) {
+        if (!this._isNew(win) || this.tiles.has(win) || win.is_fullscreen() ||
+            win.is_override_redirect() || isHelper(win) || !this._opensOnPrimary(win) ||
+            this._shouldTile(win))
+            return;
+        if (win.get_monitor() !== global.display.get_primary_monitor())
+            this._centre(win);
     }
 
     /**
@@ -3975,6 +4003,7 @@ export class Tiling {
             tile.sync();
         }
         this._raise(win);
+        this._bringToPrimary(win);
     }
 
     /**
@@ -3996,10 +4025,7 @@ export class Tiling {
         if (type !== Meta.WindowType.NORMAL && type !== Meta.WindowType.DIALOG &&
             type !== Meta.WindowType.MODAL_DIALOG && type !== Meta.WindowType.UTILITY)
             return;
-        const cls = (win.get_wm_class() ?? '').toLowerCase();
-        const above = this.config.values.layout.above;
-        if (!cls || !Array.isArray(above) ||
-            !above.some(p => String(p) && cls.includes(String(p).toLowerCase())))
+        if (!this._named(win, this.config.values.layout.above))
             return;
         if (this._shouldTile(win))
             return;

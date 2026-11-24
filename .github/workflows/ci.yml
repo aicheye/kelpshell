@@ -13,8 +13,8 @@ jobs:
     name: ESLint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -25,14 +25,14 @@ jobs:
     name: Shell scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: shellcheck install.sh dev/*.sh
 
   native:
     name: Native modules
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libglib2.0-dev
       # Compiled, not linked: the modules call Mutter functions that only a
       # running GNOME Shell provides.
@@ -46,6 +46,6 @@ jobs:
     name: Light stylesheet
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: python3 dev/light-css.py
       - run: test -s kelpshell@aicheye/stylesheet-light.css

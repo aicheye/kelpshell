@@ -32,7 +32,8 @@ session_env() {
 client_env() {
     [[ -f "$ROOT/bus" ]] || { echo "not running: dev/headless.sh start" >&2; exit 1; }
     session_env
-    export DBUS_SESSION_BUS_ADDRESS="$(cat "$ROOT/bus")"
+    DBUS_SESSION_BUS_ADDRESS="$(cat "$ROOT/bus")"
+    export DBUS_SESSION_BUS_ADDRESS
     export WAYLAND_DISPLAY=kelp-test GDK_BACKEND=wayland
 }
 

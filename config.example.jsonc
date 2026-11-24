@@ -35,8 +35,10 @@
                                              // true: it scrolls like the primary
     "float": [],                             // wm_class or title substrings that never tile,
                                              // for example ["pavucontrol", "Picture-in-Picture"]
-    "above": ["1password"]                   // wm_class substrings: a window of these apps that is not
+    "above": ["1password"],                  // wm_class substrings: a window of these apps that is not
                                              // in a column stays over the other windows
+    "onPrimary": ["1password"]               // wm_class substrings: such a window opens on the primary
+                                             // monitor, whichever monitor has the focus
   },
 
   "focusRing": {
