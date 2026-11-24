@@ -79,6 +79,7 @@ export const DEFAULTS = {
         // Windows whose toolkit is not found by itself, by wm_class substring:
         // {match: 'name', toolkit: 'firefox' | 'gtk4' | 'chromium' | 'none'}.
         apps: [],
+        log: false,           // write what the touchpad sent and what the windows were sent to ~/.cache/kelpshell/scroll-log.json
     },
     clipboard: {
         size: 25,             // entries kept

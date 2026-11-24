@@ -1011,7 +1011,10 @@ class Minimap {
     }
 
     queueRebuild() {
-        if (this._idleId)
+        // The tiling still reports changes while the shell ends, after the
+        // sidebar is gone: three logouts of 2026-11-23 each logged "has
+        // been already disposed" for the rows built again then.
+        if (this._idleId || this._destroyed)
             return;
         this._idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             this._idleId = 0;
@@ -1670,6 +1673,7 @@ class Minimap {
     }
 
     destroy() {
+        this._destroyed = true;
         this._cancelPreviewTimer();
         if (this._idleId)
             GLib.source_remove(this._idleId);

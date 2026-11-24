@@ -351,7 +351,8 @@ headless shell on 2026-11-23 with the same events sent to each).
   window moved nothing, and none do now (headless shell, 2026-11-24). The
   shell reads where the scroll was one touchpad report before each frame,
   on the line between two events, so the window follows the fingers about
-  8 ms later than before.
+  9 ms later than before. With reports that come 6 to 8 ms apart, or with
+  one in twenty left out, every frame is within 3% of the others.
 - The movement stops when the fingers are back on the touchpad, a key or a
   button is pressed, or the pointer is over another window.
 
@@ -375,7 +376,9 @@ the shell divides that factor out, so the two never add up. GNOME has a
 setting of this kind too (`scroll-speed` in
 `org.gnome.desktop.peripherals.touchpad`), which Mutter 51.1 does not read.
 `scroll.likeFirefox: false` leaves every window to its own toolkit, and
-`scroll.apps` names the toolkit of a window that is not recognized. The mouse
+`scroll.apps` names the toolkit of a window that is not recognized.
+`scroll.log: true` writes what the touchpad reported and what the windows
+were sent for the last 40 scrolls to `~/.cache/kelpshell/scroll-log.json`. The mouse
 wheel is not changed. This needs the native module.
 
 **Material.** Cards show the wallpaper, blurred and tinted, at their own

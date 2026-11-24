@@ -88,7 +88,8 @@
     "likeFirefox": true,     // every window scrolls as far, and goes on as long after the fingers, as Firefox. false: each toolkit as it is
     // Windows whose toolkit is not recognized, by wm_class substring:
     // {"match": "name", "toolkit": "firefox" | "gtk4" | "chromium" | "none"}
-    "apps": []
+    "apps": [],
+    "log": false             // write the touchpad's reports and what the windows were sent, for the last 40 scrolls, to ~/.cache/kelpshell/scroll-log.json
   },
 
   "clipboard": {

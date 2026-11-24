@@ -98,9 +98,17 @@ const SAMPLE_MS = 5;
 // went on, for 27 px, when it was told 200 ms after an event that was one
 // frame newer than the last of the touchpad (2026-11-24).
 const REST_MS = 300;
-// ms between two reports of a touchpad, before the first two of a scroll
-// have told.
+// ms between two reports of a touchpad, before any have told.
 const INPUT_MS = 8;
+// ms a report is on its way from the touchpad to this file, at the most.
+const DELIVERY_MS = 1;
+// The times between reports that are kept.
+const GAPS = 20;
+// The share of a frame's time by which the time read back changes in one
+// frame, at the most: see _stepPan().
+const LAG_STEP = 0.03;
+// Gestures kept for scroll.log.
+const LOG_GESTURES = 40;
 // ms without a report after which the fingers count as resting.
 const IDLE_MS = 150;
 
@@ -217,6 +225,10 @@ export class Scroll {
         this._factor = [1, 1];        // of libinput-config
         this._byPid = new Map();      // pid -> toolkit name, or a promise of it
         this._pan = null;             // the scroll the fingers are making
+        this._gaps = [];              // ms between the last reports of the touchpad
+        this._gap = INPUT_MS;         // ms between two reports, see _onScroll()
+        this._lag = INPUT_MS + DELIVERY_MS;   // ms the window is behind the fingers
+        this._log = null;             // the gestures recorded for scroll.log
         this._carry = null;           // px not yet sent to a window of an X11 client
         this._fling = null;           // the movement after it
         this._serial = 0;
@@ -355,10 +367,12 @@ export class Scroll {
                 // much of it has been sent.
                 points: [{t: t - INPUT_MS, x: 0, y: 0}],
                 atX: 0, atY: 0, sentX: 0, sentY: 0, sentTime: 0,
-                period: INPUT_MS, lastTime: 0, timeline: null, steps: 0, clock: 0,
+                lastTime: 0, timeline: null, steps: 0, clock: 0,
                 ending: null,
             };
+            this._logStart(window, toolkit, scale);
         }
+        this._note('e', t, dx, dy, finish, GLib.get_monotonic_time() / 1000);
         // The fingers moved again before the last of the scroll was sent.
         pan.ending = null;
 
@@ -369,13 +383,18 @@ export class Scroll {
             pan.points.push({t, x: pan.atX, y: pan.atY});
             if (pan.points.length > 12)
                 pan.points.shift();
-            // The time between two reports: the longest of the last ones.
-            // A touchpad that reports every 6 to 10 ms is read 10 ms back,
-            // so that the report after the time read is there. A longer
-            // wait is the fingers at rest.
+            // The time between two reports: what four in five of the last
+            // GAPS were under. One that is left out now and then, or all
+            // that are while the fingers creep, do not count for it. A
+            // longer wait is the fingers at rest.
             const gap = t - pan.lastTime;
-            if (pan.lastTime && gap > 1 && gap < 25)
-                pan.period = Math.max(gap, pan.period + (gap - pan.period) * 0.15);
+            if (pan.lastTime && gap > 1 && gap < 25) {
+                this._gaps.push(gap);
+                if (this._gaps.length > GAPS)
+                    this._gaps.shift();
+                const sorted = this._gaps.slice().sort((p, q) => p - q);
+                this._gap = sorted[Math.floor((sorted.length - 1) * 0.8)];
+            }
             pan.lastTime = t;
         }
 
@@ -422,6 +441,48 @@ export class Scroll {
         return true;
     }
 
+    // ---- scroll.log ----
+
+    /**
+     * With scroll.log on, what came from the touchpad and what was sent for
+     * it is kept for the last LOG_GESTURES scrolls and written to
+     * ~/.cache/kelpshell/scroll-log.json after each: for finding out why a
+     * scroll was not even on this machine.
+     */
+    _logStart(window, toolkit, scale) {
+        if (this._config.values.scroll.log !== true) {
+            this._log = null;
+            return;
+        }
+        this._log ??= [];
+        this._log.push([['g', window.get_wm_class(), toolkit.px, scale,
+            global.display.get_monitor_geometry(Math.max(0, window.get_monitor())).width]]);
+        if (this._log.length > LOG_GESTURES)
+            this._log.shift();
+    }
+
+    _note(...values) {
+        this._log?.[this._log.length - 1].push(values);
+    }
+
+    _logWrite() {
+        if (!this._log)
+            return;
+        const dir = GLib.build_filenamev([GLib.get_user_cache_dir(), 'kelpshell']);
+        GLib.mkdir_with_parents(dir, 0o755);
+        const round = v => typeof v === 'number' ? Math.round(v * 1000) / 1000 : v;
+        const text = JSON.stringify(this._log.map(gesture => gesture.map(row => row.map(round))));
+        Gio.File.new_for_path(GLib.build_filenamev([dir, 'scroll-log.json'])).replace_contents_bytes_async(
+            new GLib.Bytes(new TextEncoder().encode(text)), null, false,
+            Gio.FileCreateFlags.REPLACE_DESTINATION, null, (file, result) => {
+                try {
+                    file.replace_contents_finish(result);
+                } catch (e) {
+                    console.warn(`kelpshell: scroll log: ${e.message}`);
+                }
+            });
+    }
+
     _runPan(pan) {
         if (pan.timeline)
             return;
@@ -457,13 +518,25 @@ export class Scroll {
      * move one more over the edge of a frame.
      *
      * Here the events only say where the scroll was at which time. Each
-     * frame, the place it had one touchpad report before the time of the
-     * frame is read from them, between two events on a straight line, and
-     * the window is sent the way from the place of the frame before. The
-     * frames are a whole number of frame times apart by the frame clock, as
-     * in _stepFling(). The price is that one report, about 8 ms, between
-     * the fingers and the window: a place between two events is not known
-     * before the second one is there.
+     * frame, the place it had a little before the time of the frame is read
+     * from them, between two events on a straight line, and the window is
+     * sent the way from the place of the frame before.
+     *
+     *   - The time of a frame goes on by a whole number of frame times, by
+     *     the frame clock, as in _stepFling(), and is drawn towards the
+     *     clock by a twentieth of what it is off.
+     *   - "A little before" is this._lag: the time between two reports and
+     *     DELIVERY_MS, so that the report after the time read is there. It is what the window is behind the fingers, about
+     *     9 ms. It follows the reports by LAG_STEP of a frame time in each
+     *     frame and no faster. Until 2026-11-24 it was set by each report
+     *     at once: a report 2 ms later than the others moved the time read
+     *     back by 2 ms in one frame, a frame of two thirds of the others.
+     *     With reports 6 to 8 ms apart, frames were between 27% and 140% of
+     *     their mean (the user: "scroll doesn't feel smooth still").
+     *   - When the report after the time read is not there yet, the scroll
+     *     is taken to go on as between the last two, for one frame time at
+     *     the most. It is never taken back for that: when the reports then
+     *     say that it went less far, the window waits for them.
      */
     _stepPan(pan, timeline) {
         const frame = 1000 / (timeline.frame_clock?.get_refresh_rate() || 60);
@@ -472,32 +545,51 @@ export class Scroll {
             ? 1 : Math.max(1, Math.round(timeline.get_delta() / frame));
         pan.clock += frames * frame;
         // The first frame, or the clock of the frames has left the time.
-        if (pan.steps === 1 || Math.abs(pan.clock - now) > 2 * frame)
+        if (pan.steps === 1 || Math.abs(now - pan.clock) > 3 * frame)
             pan.clock = now;
-        const at = pan.clock - pan.period;
+        else
+            pan.clock += (now - pan.clock) * 0.05;
+        const want = this._gap + DELIVERY_MS;
+        this._lag += Math.max(-LAG_STEP * frame, Math.min(LAG_STEP * frame, want - this._lag));
+        const at = pan.clock - this._lag;
 
-        // Where the scroll was at that time: on the line between the two
-        // events around it, and where the last event has it from then on.
         const points = pan.points;
         const last = points[points.length - 1];
+        let i = points.length - 1;
+        while (i > 1 && points[i - 1].t > at)
+            i--;
+        // The two events around that time, or the last two.
+        const b = points[i];
+        const a = points[Math.max(0, i - 1)];
+        const span = b.t - a.t;
         let x = last.x;
         let y = last.y;
+        let how = 'end';
         if (at < last.t) {
-            let i = points.length - 1;
-            while (i > 0 && points[i - 1].t > at)
-                i--;
-            const b = points[i];
-            const a = points[Math.max(0, i - 1)];
-            const share = b.t > a.t ? Math.max(0, (at - a.t) / (b.t - a.t)) : 0;
+            const share = span > 0 ? Math.max(0, (at - a.t) / span) : 0;
             x = a.x + (b.x - a.x) * share;
             y = a.y + (b.y - a.y) * share;
+            how = 'between';
+        } else if (!pan.ending && span > 0 && span < 25 && at - last.t < 25) {
+            const ahead = Math.min(at - last.t, frame) / span;
+            x += (b.x - a.x) * ahead;
+            y += (b.y - a.y) * ahead;
+            how = 'on';
         }
+        // Not back against the way the fingers go: the window is ahead of
+        // them by what was taken to go on, and waits.
+        if ((x - pan.sentX) * (b.x - a.x) < 0)
+            x = pan.sentX;
+        if ((y - pan.sentY) * (b.y - a.y) < 0)
+            y = pan.sentY;
+        this._note('t', now, timeline.get_delta(), frames, at, this._lag, this._gap,
+            x - pan.sentX, y - pan.sentY, how);
         if (x !== pan.sentX || y !== pan.sentY) {
             const [px, py, modifiers] = global.get_pointer();
             // The time the scroll was at this place: Firefox measures the
             // speed it goes on with from the way and the time between two
             // events. Times go up, a ms apart at the least.
-            pan.sentTime = Math.max(pan.sentTime + 1, Math.min(at, last.t));
+            pan.sentTime = Math.max(pan.sentTime + 1, pan.ending ? Math.min(at, last.t) : at);
             this._send(pan.window, pan.toolkit, x - pan.sentX, y - pan.sentY,
                 px, py, modifiers, Math.round(pan.sentTime * 1000));
             pan.sentX = x;
@@ -541,6 +633,7 @@ export class Scroll {
             const [x, y, modifiers] = global.get_pointer();
             this._native.emit('send', 0, 0, finish, x, y, modifiers,
                 Math.round((pan.sentTime + 1) * 1000));
+            this._logWrite();
             return;
         }
         this._startFling(pan.window, pan.toolkit, pan.scale, vx, vy, pan.sentTime);
@@ -650,6 +743,7 @@ export class Scroll {
         // px of the monitor to Clutter's unit for this toolkit.
         const unit = fling.scale * fling.toolkit.px * 10;
         fling.time += dt;
+        this._note('f', GLib.get_monotonic_time() / 1000, dt, fling.vy * dt / unit);
         this._send(fling.window, fling.toolkit,
             fling.vx * dt / unit, fling.vy * dt / unit, x, y, modifiers,
             Math.round(fling.time * 1000));
@@ -695,6 +789,7 @@ export class Scroll {
         fling.timeline?.stop();
         if (fling.restId)
             GLib.source_remove(fling.restId);
+        this._logWrite();
         this._native?.emit('watch', false);
         if (tell && this._native) {
             const [x, y, modifiers] = global.get_pointer();
