@@ -8,7 +8,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
-import Mtk from 'gi://Mtk';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
@@ -19,20 +18,10 @@ import {ShadowBin} from './backdrop.js';
 import {SWIPE_FINGERS as LAUNCHER_FINGERS} from './launcher.js';
 import {Overrides} from './overrides.js';
 import {holdTransitions} from './settle.js';
-import {pointerDelta} from './swipe.js';
 import {endRehearsal} from './warm.js';
 
 // The shell's time for its own opening animation (STARTUP_ANIMATION_TIME in layout.js).
 const STARTUP_MS = 500;
-
-// The swipe that slides the workspaces, as in the shell's swipeTracker.js:
-// its least number of fingers, and the touchpad units travelled before the
-// axis is decided.
-const WORKSPACE_FINGERS = 3;
-const WORKSPACE_SWIPE_DISTANCE = 16;
-// Fingers that rested this long before lifting have no velocity, as in
-// lib/tiling.js.
-const WORKSPACE_REST_MS = 80;
 
 // px between the edges of a tiled window and the edges of a banner over it.
 const BANNER_INSET = 12;
@@ -398,10 +387,9 @@ export class Tweaks {
      * the horizontal swipe, so the shell's gesture is detached and the strip
      * keeps it. Super + scroll switches workspaces either way.
      *
-     * The shell's gesture takes a swipe of three fingers or more. Here
-     * four-finger swipes are kept from it while they open the launcher
-     * (gestures.launcherSwipe), and the others slide the workspaces as far
-     * as the pointer would move, see _onWorkspaceSwipe.
+     * The shell's gesture takes a swipe of three fingers or more. Here it
+     * is connected through a filter that keeps four-finger swipes from it
+     * while they open the launcher (gestures.launcherSwipe).
      *
      * how is 'vertical', 'detached', or 'stock' for the shell's own
      * connection.
@@ -412,10 +400,6 @@ export class Tweaks {
         if (!gesture?._handleEvent || how === this._workspaceGesture)
             return;
         this._workspaceGesture = how;
-        // A swipe that slides the workspaces now ends where it began.
-        if (this._workspaceSwipe?.handling && tracker._state && typeof tracker._interrupt === 'function')
-            tracker._interrupt();
-        this._workspaceSwipe = null;
         global.stage.disconnectObject(gesture);
         if (how === 'detached')
             return;
@@ -424,80 +408,10 @@ export class Tweaks {
             global.stage.connectObject('event::touchpad', handle, gesture);
             return;
         }
-        // Without the tracker's handlers of this version, the shell's own
-        // gesture with its own distance.
-        const own = ['_beginTouchpadGesture', '_updateTouchpadGesture', '_endTouchpadGesture']
-            .every(name => typeof tracker[name] === 'function');
-        global.stage.connectObject('event::touchpad', (actor, event) => {
-            if (this._isLauncherSwipe(event))
-                return Clutter.EVENT_PROPAGATE;
-            return own ? this._onWorkspaceSwipe(tracker, gesture, event) : handle(actor, event);
-        }, gesture);
+        global.stage.connectObject('event::touchpad', (actor, event) =>
+            this._isLauncherSwipe(event) ? Clutter.EVENT_PROPAGATE : handle(actor, event),
+        gesture);
         tracker.orientation = Clutter.Orientation.VERTICAL;
-    }
-
-    /**
-     * A swipe up or down slides the workspaces as far as the pointer would
-     * move for the same movement of the fingers, see lib/swipe.js.
-     *
-     * The shell's gesture (TouchpadSwipeGesture in swipeTracker.js) tells
-     * its tracker the movement in touchpad units, and that 300 of them are
-     * one workspace: 5.1 px per unit on a monitor 1440 px high, whatever
-     * the speed of the pointer is set to. This is that gesture with
-     * the movement in px and the px from one workspace to the next as the
-     * length, which the workspace animation gives the tracker when the
-     * swipe begins (tracker.distance). Which swipes it takes, the axis and
-     * the fling at the end are the shell's.
-     *
-     * Fingers that rest before they lift leave the workspaces at the
-     * nearer one. The shell's tracker keeps the speed of the last movement
-     * however long ago that was (EventHistory.trim() drops nothing when
-     * every entry is old), so a slow drag of a tenth of the way, held and
-     * let go, would go on to the next workspace.
-     */
-    _onWorkspaceSwipe(tracker, gesture, event) {
-        if (event.type() !== Clutter.EventType.TOUCHPAD_SWIPE)
-            return Clutter.EVENT_PROPAGATE;
-        const phase = event.get_gesture_phase();
-        if (phase === Clutter.TouchpadGesturePhase.BEGIN)
-            this._workspaceSwipe = {handling: false, ignored: false, dx: 0, dy: 0, monitor: -1, moved: 0};
-        const s = this._workspaceSwipe;
-        if (!s || s.ignored ||
-            event.get_touchpad_gesture_finger_count() < WORKSPACE_FINGERS ||
-            (gesture._allowedModes & Main.actionMode) === 0 || !gesture.enabled)
-            return Clutter.EVENT_PROPAGATE;
-
-        const time = event.get_time();
-        if (!s.handling) {
-            const [dx, dy] = event.get_gesture_motion_delta_unaccelerated();
-            s.dx += dx;
-            s.dy += dy;
-            if (Math.hypot(s.dx, s.dy) < WORKSPACE_SWIPE_DISTANCE)
-                return Clutter.EVENT_PROPAGATE;
-            if (Math.abs(s.dx) > Math.abs(s.dy)) {
-                s.ignored = true;
-                return Clutter.EVENT_PROPAGATE;
-            }
-            s.handling = true;
-            const [x, y] = event.get_coords();
-            s.monitor = global.display.get_monitor_index_for_rect(
-                new Mtk.Rectangle({x, y, width: 1, height: 1}));
-            tracker._beginTouchpadGesture(gesture, time, x, y);
-        }
-
-        if (phase === Clutter.TouchpadGesturePhase.END ||
-            phase === Clutter.TouchpadGesturePhase.CANCEL) {
-            this._workspaceSwipe = null;
-            if (time - s.moved > WORKSPACE_REST_MS)
-                tracker._history?.reset?.();
-            tracker._endTouchpadGesture(gesture, time, tracker.distance);
-            return Clutter.EVENT_PROPAGATE;
-        }
-        s.moved = time;
-        const [, py] = pointerDelta(event, s.monitor, this._config);
-        const natural = gesture._touchpadSettings?.get_boolean('natural-scroll');
-        tracker._updateTouchpadGesture(gesture, time, natural ? -py : py, tracker.distance);
-        return Clutter.EVENT_STOP;
     }
 
     /** True for a touchpad event that lib/launcher.js handles: a four-finger swipe. */

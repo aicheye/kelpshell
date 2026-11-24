@@ -105,7 +105,7 @@ export const DEFAULTS = {
     gestures: {
         swipeScroll: true,    // three-finger horizontal swipe scrolls the strip
         launcherSwipe: true,  // four-finger swipe up opens the launcher, down closes it
-        sensitivity: 1,       // 1: a three-finger swipe moves the picture as far as the same movement moves the pointer
+        sensitivity: 1,       // 1: a swipe of 1200 touchpad units scrolls one view width
     },
     keybindings: {
         'focus-left': ['<Super>a', '<Super>Left'],
