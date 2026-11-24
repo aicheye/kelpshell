@@ -43,11 +43,27 @@ const FULL_SLACK = 0.02;
 const MIN_SNAP_SHARE = 0.05;
 
 // Windows that are popups to the eye but give the window manager no hint of
-// it: normal type, resizable, no parent. Matched on wm_class and title.
+// it: normal type, resizable, no parent. Matched on the names of the app
+// (appNames) and on the title.
 const FLOAT_RULES = [
-    {cls: '1password', title: /^quick access/i},
+    {app: /1password|onepassword/, title: /^quick access/i},
     {title: /^picture[- ]in[- ]picture$/i},
 ];
+
+/**
+ * The names the app of a window goes by, in lower case: the class and the
+ * instance the window gives, the id of the app's desktop file and the name
+ * the app is shown with.
+ *
+ * The class alone does not name every app the way its user does. The
+ * windows of 1Password have the class "com.onepassword.OnePassword", which
+ * does not contain "1password". Its name is "1Password".
+ */
+function appNames(win) {
+    const app = Shell.WindowTracker.get_default().get_window_app(win);
+    return [win.get_wm_class(), win.get_wm_class_instance(), app?.get_id(), app?.get_name()]
+        .filter(name => name).map(name => name.toLowerCase());
+}
 // Clients that open a window only to be given keyboard focus. wl-copy sets
 // the clipboard this way: a transparent window that closes a few
 // milliseconds later. Tiled, it would take a column and give it back, and
@@ -3608,14 +3624,15 @@ export class Tiling {
             return true;
         if (FLOAT_ROLES.has((win.get_role() ?? '').toLowerCase()))
             return true;
-        const cls = (win.get_wm_class() ?? '').toLowerCase();
+        const names = appNames(win);
         const title = win.get_title() ?? '';
-        if (FLOAT_RULES.some(r => (!r.cls || cls.includes(r.cls)) && r.title.test(title)))
+        if (FLOAT_RULES.some(r =>
+            (!r.app || names.some(name => r.app.test(name))) && r.title.test(title)))
             return true;
         const lower = title.toLowerCase();
         for (const pattern of this.config.values.layout.float) {
             const p = String(pattern).toLowerCase();
-            if (p && (cls.includes(p) || lower.includes(p)))
+            if (p && (lower.includes(p) || names.some(name => name.includes(p))))
                 return true;
         }
         return false;
@@ -3716,11 +3733,13 @@ export class Tiling {
             m.y + Math.round((m.height - frame.height) / 2));
     }
 
-    /** Whether the class of a window contains one of the names of a layout list. */
-    _named(win, names) {
-        const cls = (win.get_wm_class() ?? '').toLowerCase();
-        return !!cls && Array.isArray(names) &&
-            names.some(p => String(p) && cls.includes(String(p).toLowerCase()));
+    /** Whether a name of the window's app (appNames) contains one of the names of a layout list. */
+    _named(win, list) {
+        if (!Array.isArray(list))
+            return false;
+        const names = appNames(win);
+        return list.some(p => String(p) &&
+            names.some(name => name.includes(String(p).toLowerCase())));
     }
 
     /**
@@ -3986,8 +4005,8 @@ export class Tiling {
      * been shown for PENDING_MS.
      */
     _mayFloatLate(win) {
-        const cls = (win.get_wm_class() ?? '').toLowerCase();
-        return FLOAT_RULES.some(r => r.cls && cls.includes(r.cls));
+        const names = appNames(win);
+        return FLOAT_RULES.some(r => r.app && names.some(name => r.app.test(name)));
     }
 
     /** PENDING_MS after a new window is shown, its pending column counts. */

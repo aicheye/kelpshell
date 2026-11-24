@@ -32,8 +32,8 @@ export const DEFAULTS = {
         centerFocusedColumn: 'never',   // 'never' | 'always'
         verticalWorkspaces: true,
         scrollSecondary: false,   // false: a secondary monitor fits its columns and never scrolls
-        float: [],            // wm_class substrings that never tile
-        above: ['1password'], // wm_class substrings whose windows off the strip stay over the other windows
+        float: [],            // substrings of an app's name, wm_class or title that never tile
+        above: ['1password'], // substrings of an app's name or wm_class whose windows off the strip stay over the other windows
     },
     focusRing: {
         enabled: true,
