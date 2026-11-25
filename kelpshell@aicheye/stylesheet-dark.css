@@ -607,6 +607,115 @@
   spacing: 6px;
 }
 
+/* ---------- privacy ---------- */
+
+.kelp-privacy {
+  padding: 6px;
+}
+/* 10px: behind the 6px padding of the card. The colours are the same in
+   both styles: each stands for one kind of use. */
+.kelp-chip {
+  border-radius: 10px;
+  padding: 6px 9px;
+  color: #ffffff; /* light: keep */
+  font-size: 12px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+  transition-duration: 120ms;
+}
+/* 18px: every chip is as high as one with a stop button. */
+.kelp-chip-box {
+  spacing: 6px;
+  min-height: 18px;
+}
+/* The stop button at the far edge of a chip that stops what it stands for.
+   4px: behind the 6px padding of the chip. */
+.kelp-chip-stops {
+  padding-right: 6px;
+}
+.kelp-chip-stop {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.30); /* light: keep */
+  transition-duration: 120ms;
+}
+.kelp-chip:hover .kelp-chip-stop,
+.kelp-chip:focus .kelp-chip-stop {
+  background-color: rgba(0, 0, 0, 0.42); /* light: keep */
+}
+.kelp-chip-stop-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background-color: #ffffff; /* light: keep */
+}
+.kelp-chip .kelp-icon {
+  icon-size: 14px;
+}
+.kelp-chip-record {
+  background-color: #c01c28;
+}
+.kelp-chip-record:hover,
+.kelp-chip-record:focus {
+  background-color: #d61f2d;
+}
+.kelp-chip-record:active {
+  background-color: #e02a37;
+}
+.kelp-chip-cast {
+  background-color: #9141ac;
+}
+.kelp-chip-cast:hover,
+.kelp-chip-cast:focus {
+  background-color: #a04bbc;
+}
+.kelp-chip-cast:active {
+  background-color: #ad5bc8;
+}
+.kelp-chip-mic {
+  background-color: #e66100;
+}
+.kelp-chip-mic:hover,
+.kelp-chip-mic:focus {
+  background-color: #f26c0a;
+}
+.kelp-chip-mic:active {
+  background-color: #ff7800;
+}
+/* A muted microphone records nothing: the chip has no colour. */
+.kelp-chip-mic.muted {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.70);
+}
+.kelp-chip-mic.muted:hover,
+.kelp-chip-mic.muted:focus {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+.kelp-chip-camera {
+  background-color: #26a269;
+}
+.collapsed .kelp-privacy {
+  padding: 4px;
+}
+/* 11px: behind the 4px padding of the collapsed cards. */
+.collapsed .kelp-chip {
+  border-radius: 11px;
+  padding: 7px 0;
+}
+
+/* The outline of a window that is recorded or shared, see lib/privacy.js.
+   Its width and radius are set there. */
+.kelp-cast-outline {
+  border-style: solid;
+}
+.kelp-cast-outline-record {
+  border-color: #e01b24;
+}
+.kelp-cast-outline-cast {
+  border-color: #c061cb;
+}
+
 /* ---------- controls ---------- */
 
 .kelp-controls {

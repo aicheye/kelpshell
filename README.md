@@ -10,7 +10,7 @@ A GNOME Shell extension that replaces the top bar with a sidebar and arranges wi
 
 Kelpshell changes how the GNOME desktop is laid out and keeps GNOME's apps, settings and session. It provides:
 
-- **Sidebar**: clock, workspaces, media, notifications, downloads, system meters and status, as cards on the left edge
+- **Sidebar**: clock, workspaces, media, notifications, downloads, system meters, privacy and status, as cards on the left edge
 - **Scrolling window manager**: every window is a column, new windows open beside the focused one, and the view scrolls to it
 - **Launcher**: apps, windows, files, settings, arithmetic and commands from one search field
 - **Clipboard history and emoji picker**: opened at the text cursor
@@ -33,11 +33,14 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 - **Notifications**: the latest notifications. Click to open one, middle-click to dismiss it.
 - **Downloads**: the newest files of the downloads folder as a pile.
 - **System**: processor, memory, disk space, disk activity and network.
+- **Privacy**: there while the screen is recorded or shared, or an app uses the microphone or a camera. A click stops the recording, stops the sharing, or mutes the microphone.
 - **Status**: network, Bluetooth, battery and volume. A click opens quick settings, a secondary click on the volume icon lists the output devices.
 
 `Super+B` collapses the sidebar to a strip of icons, and the windows move over with it. It hides while a window is fullscreen.
 
 ![The sidebar collapsed to icons, with two windows stacked in the first column](docs/screenshots/collapsed.png)
+
+A monitor that is recorded or shared has a glow along its edges, an area has a line around it and a window an outline: red for a recording, purple for sharing. They are on the screen and not in the recording.
 
 The calendar and quick settings open next to their cards.
 
@@ -194,7 +197,7 @@ The script links the extension into `~/.local/share/gnome-shell/extensions`, so 
 
 ### Native modules
 
-Four small C modules add what a shell extension cannot do in JavaScript: a title bar for apps that would otherwise draw a fallback frame (Spotify and other Chromium apps), dragging a file from the downloads pile into a window, even touchpad scrolling, and the right size for X11 windows (a fullscreen VLC, for example) after a monitor with another scale is connected or removed. `install.sh` builds them when `gcc` is installed. Everything else works without them.
+Five small C modules add what a shell extension cannot do in JavaScript: a title bar for apps that would otherwise draw a fallback frame (Spotify and other Chromium apps), dragging a file from the downloads pile into a window, even touchpad scrolling, the right size for X11 windows (a fullscreen VLC, for example) after a monitor with another scale is connected or removed, and the glow and the line on what is recorded or shared. `install.sh` builds them when `gcc` is installed. Everything else works without them.
 
 They are built for the installed GNOME Shell version. Run `./install.sh` again after an upgrade of GNOME.
 
@@ -263,7 +266,7 @@ Edit `kelpshell@aicheye/stylesheet-dark.css` for style changes and run `dev/ligh
 
 - GNOME Shell 51 on Wayland only. An X11 session and fractional display scales are not tested.
 - Not on extensions.gnome.org: the native modules and the changes to the shell's own lock screen and overview are outside what that site accepts.
-- The top bar is hidden, so anything that lives only there is not shown: app indicators from other extensions, the keyboard layout indicator and the screen recording indicator.
+- The top bar is hidden, so anything that lives only there is not shown: app indicators from other extensions and the keyboard layout indicator.
 - The window layout is kept across the lock screen but not across a logout.
 - Copied files are kept in the clipboard history as the text of their paths.
 - The emoji picker has no GIF page and no skin tones.

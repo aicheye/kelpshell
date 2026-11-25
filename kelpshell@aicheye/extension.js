@@ -30,6 +30,7 @@ import {LockPower} from './lib/lockpower.js';
 import {LockHold} from './lib/lockhold.js';
 import {LidLock} from './lib/lidlock.js';
 import {Outputs} from './lib/outputs.js';
+import {Privacy} from './lib/privacy.js';
 import {X11Size} from './lib/x11size.js';
 
 const ANY = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW;
@@ -231,6 +232,11 @@ export default class Kelpshell extends Extension {
         this.cheatsheet = new Cheatsheet(this);
         this.cheatsheet.enable();
 
+        // After the decorations, which load the native modules, and before
+        // the sidebar, which has a card for it.
+        this.privacy = new Privacy(this.config);
+        this.privacy.enable();
+
         this.sidebar = new Sidebar(this);
         this.sidebar.launcher = this.launcher;
         this.sidebar.enable(kept?.sidebar);
@@ -273,6 +279,7 @@ export default class Kelpshell extends Extension {
     _end() {
         this._ended = true;
         for (const stop of [
+            () => this.privacy?.disable(),
             () => this.sidebar?.disable(),
             () => this.tiling?.fade?.disable(),
             () => this.backdrop?.glass?.disable(),
@@ -335,6 +342,7 @@ export default class Kelpshell extends Extension {
             // goes before the tweaks that show the bar again.
             () => this.keys?.disable(),
             () => this.sidebar?.disable(),
+            () => this.privacy?.disable(),
             () => this.cheatsheet?.disable(),
             () => this.switcher?.disable(),
             () => this.clipboard?.disable(),
@@ -368,7 +376,7 @@ export default class Kelpshell extends Extension {
         this.keys = this.sidebar = this.launcher = this.tiling = this.switcher = null;
         this.cheatsheet = this.decorations = this.clipboard = null;
         this.tweaks = this.backdrop = this.lockPicture = this.animator = this.config = null;
-        this.dialogs = this.scroll = null;
+        this.dialogs = this.scroll = this.privacy = null;
     }
 
     _reportConfigError() {
@@ -388,6 +396,7 @@ export default class Kelpshell extends Extension {
         this.sidebar.setCollapsed(this.config.values.sidebar.collapsed);
         this.sidebar.reposition(true);
         this.tiling.ring.restyle();
+        this.privacy.sync();
         this.decorations.apply();
         this._syncFrames();
     }

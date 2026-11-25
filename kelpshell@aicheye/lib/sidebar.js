@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The sidebar: a column of cards on the left edge of the primary monitor.
-// Clock, workspace minimap, media, notifications, downloads, and status
-// controls. Cards that have nothing to show (no player, no notifications, an
-// empty downloads folder) are hidden. The downloads card is lib/downloads.js.
+// Clock, workspace minimap, media, notifications, downloads, privacy, and
+// status controls. Cards that have nothing to show (no player, no
+// notifications, an empty downloads folder, nothing recorded or listened
+// to) are hidden. The downloads card is lib/downloads.js.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -2697,6 +2698,364 @@ class SystemCard {
 
 // ---------------------------------------------------------------- controls
 
+// ---------------------------------------------------------------- privacy
+
+const CHIP_MS = 200;
+
+// A chip of the privacy card: icons and labels in a row, with a click or
+// without. A chip that stops what it stands for ends in a stop button, a
+// square on a dark ground. Its row is as wide as the chip, so the button is
+// at the far edge of every such chip and what is stopped at the near one.
+function chip(styleClass, children, onClick, stops = false) {
+    const box = new St.BoxLayout({
+        style_class: 'kelp-chip-box',
+        x_expand: stops,
+        x_align: stops ? Clutter.ActorAlign.FILL : Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    for (const child of children)
+        box.add_child(child);
+    if (stops) {
+        box.add_child(new St.Bin({
+            style_class: 'kelp-chip-stop',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.CENTER,
+            child: new St.Widget({style_class: 'kelp-chip-stop-mark'}),
+        }));
+    }
+    const button = new St.Button({
+        style_class: `kelp-chip ${styleClass}${stops ? ' kelp-chip-stops' : ''}`,
+        child: box,
+        reactive: !!onClick,
+        can_focus: !!onClick,
+        track_hover: !!onClick,
+        clip_to_allocation: true,
+        visible: false,
+    });
+    if (onClick)
+        button.connect('clicked', onClick);
+    return button;
+}
+
+// The chips of the privacy card, in lines that are filled from edge to edge.
+// A chip is as wide as what is in it and the chips of a line share the room
+// that is left, so one chip is as wide as the card and two are half of it
+// each. In a column (the collapsed sidebar) each chip is a line.
+//
+// When the chips that are shown change, every chip goes from the place it
+// is drawn at to its new one over CHIP_MS, and the box from its height to
+// the new one. A chip that comes grows from the edge of the chip before it
+// and fades in, or from the lower edge of the box when it starts a line. A
+// chip that goes does the reverse.
+const ChipBox = GObject.registerClass({
+    Properties: {
+        'progress': GObject.ParamSpec.double('progress', 'progress', 'progress',
+            GObject.ParamFlags.READWRITE, 0, 1, 1),
+    },
+}, class KelpChipBox extends St.Widget {
+    _init(spacing) {
+        super._init({style_class: 'kelp-privacy', x_expand: true, clip_to_allocation: true});
+        this._spacing = spacing;
+        this._column = false;
+        this._shown = new Set();
+        this._from = null;   // while the chips move: {boxes, opacity, height}
+        this._progress = 1;
+    }
+
+    get progress() {
+        return this._progress ?? 1;
+    }
+
+    set progress(value) {
+        if (value === this._progress)
+            return;
+        this._progress = value;
+        for (const child of this.get_children()) {
+            const from = this._from?.opacity.get(child) ?? 0;
+            const to = this._shown.has(child) ? 255 : 0;
+            child.opacity = Math.round(from + (to - from) * value);
+        }
+        this.notify('progress');
+        this.queue_relayout();
+    }
+
+    set column(column) {
+        this._column = column;
+        this._settle();
+    }
+
+    /** chips: the children that are shown from now on. */
+    setShown(chips, animate) {
+        const next = new Set(chips);
+        if (next.size === this._shown.size && chips.every(c => this._shown.has(c)))
+            return;
+        // What is drawn now, also in the middle of an earlier change.
+        const drawn = this.get_children().filter(c => c.visible && c.has_allocation());
+        const from = {
+            boxes: new Map(drawn.map(c => {
+                const b = c.get_allocation_box();
+                return [c, [b.x1, b.y1, b.x2, b.y2]];
+            })),
+            opacity: new Map(drawn.map(c => [c, c.opacity])),
+            height: this.has_allocation() ? this.get_allocation_box().get_height() : 0,
+        };
+        this._restarting = true;
+        this.remove_transition('progress');
+        this._restarting = false;
+        animate &&= this.mapped && this.has_allocation() && St.Settings.get().enable_animations;
+        this._shown = next;
+        if (!animate) {
+            this._settle();
+            return;
+        }
+        this._from = from;
+        for (const child of chips) {
+            if (!child.visible) {
+                child.opacity = 0;
+                child.show();
+            }
+        }
+        this._progress = 0;
+        this.ease_property('progress', 1, {
+            duration: CHIP_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onStopped: () => {
+                if (!this._restarting)
+                    this._settle();
+            },
+        });
+    }
+
+    /** The chips are where they stay. */
+    _settle() {
+        this._from = null;
+        this._progress = 1;
+        for (const child of this.get_children()) {
+            child.visible = this._shown.has(child);
+            child.opacity = 255;
+        }
+        this.queue_relayout();
+    }
+
+    /**
+     * The places of the shown chips in a box of this width, from its top
+     * left corner: [Map chip -> [x1, y1, x2, y2], height].
+     */
+    _place(width) {
+        const lines = [];
+        let line = null, used = 0;
+        for (const child of this.get_children()) {
+            if (!this._shown.has(child))
+                continue;
+            const [, w] = child.get_preferred_width(-1);
+            const [, h] = child.get_preferred_height(-1);
+            if (line && !this._column && used + this._spacing + w <= width) {
+                used += this._spacing;
+            } else {
+                line = [];
+                lines.push(line);
+                used = 0;
+            }
+            used += w;
+            line.push({child, w, h});
+        }
+        const boxes = new Map();
+        let y = 0;
+        lines.forEach((chips, i) => {
+            y += i > 0 ? this._spacing : 0;
+            const height = Math.max(...chips.map(c => c.h));
+            const taken = chips.reduce((sum, c) => sum + c.w, 0) + (chips.length - 1) * this._spacing;
+            const more = Math.max(0, width - taken) / chips.length;
+            let x = 0;
+            for (const c of chips) {
+                boxes.set(c.child, [x, y, x + c.w + more, y + height]);
+                x += c.w + more + this._spacing;
+            }
+            y += height;
+        });
+        return [boxes, y];
+    }
+
+    /**
+     * Where a chip that comes starts, or one that goes ends: with no width
+     * at the right edge of the chip before it on its line, or with no
+     * height on the lower edge of the other arrangement when that has no
+     * line there.
+     *
+     * box: the chip's own place. others: the places of the other
+     * arrangement. bottom: its lower edge.
+     */
+    _closed(child, box, others, bottom) {
+        if (box[1] >= bottom)
+            return [box[0], bottom, box[2], bottom];
+        let x = 0;
+        for (let before = child.get_previous_sibling(); before; before = before.get_previous_sibling()) {
+            const other = others.get(before);
+            if (other && other[1] < box[3] && other[3] > box[1]) {
+                x = other[2];
+                break;
+            }
+        }
+        x = Math.max(box[0], Math.min(x, box[2]));
+        return [x, box[1], x, box[3]];
+    }
+
+    vfunc_get_preferred_width(_forHeight) {
+        let min = 0, nat = 0;
+        for (const child of this.get_children()) {
+            if (!this._shown.has(child))
+                continue;
+            const [, width] = child.get_preferred_width(-1);
+            min = Math.max(min, width);
+            nat = this._column ? min : nat + width + (nat > 0 ? this._spacing : 0);
+        }
+        return this.get_theme_node().adjust_preferred_width(min, nat);
+    }
+
+    vfunc_get_preferred_height(forWidth) {
+        const node = this.get_theme_node();
+        const [, height] = this._place(forWidth < 0 ? Infinity : node.adjust_for_width(forWidth));
+        const [, full] = node.adjust_preferred_height(height, height);
+        const from = this._from;
+        // Not rounded: the card over it is placed from this height.
+        const now = from ? from.height + (full - from.height) * this.progress : full;
+        return [now, now];
+    }
+
+    vfunc_allocate(box) {
+        this.set_allocation(box);
+        const node = this.get_theme_node();
+        const content = node.get_content_box(box);
+        // Relative to this actor.
+        const [left, top] = [content.x1 - box.x1, content.y1 - box.y1];
+        const [placed, height] = this._place(content.x2 - content.x1);
+        const target = new Map([...placed].map(([c, b]) =>
+            [c, [b[0] + left, b[1] + top, b[2] + left, b[3] + top]]));
+        const from = this._from;
+        const p = this.progress;
+        for (const child of this.get_children()) {
+            if (!child.visible)
+                continue;
+            let to = target.get(child) ?? null;
+            let start = from?.boxes.get(child) ?? null;
+            if (from && !to && start)
+                to = this._closed(child, start, target, top + height);
+            else if (from && to && !start)
+                start = this._closed(child, to, from.boxes, from.height - top);
+            if (!to)
+                continue;
+            const at = start ? to.map((v, i) => start[i] + (v - start[i]) * p) : to;
+            child.allocate(new Clutter.ActorBox({
+                x1: Math.round(at[0]), y1: Math.round(at[1]),
+                x2: Math.round(at[2]), y2: Math.round(at[3]),
+            }));
+        }
+    }
+});
+
+// What is recorded, shared or listened to now (lib/privacy.js), one chip
+// each: the screen recording with its time, a screen that is shared, the
+// microphone, a camera. A click stops the recording, stops the sharing, or
+// mutes the microphone. The card is there only while one of them is.
+class PrivacyCard {
+    constructor(sidebar) {
+        this._privacy = sidebar.privacy;
+        const icon = name => new St.Icon({
+            icon_name: name, style_class: 'kelp-icon', y_align: Clutter.ActorAlign.CENTER,
+        });
+
+        this._time = new St.Label({
+            style_class: 'kelp-chip-time', y_align: Clutter.ActorAlign.CENTER,
+        });
+        // The whole time or none of it while a chip opens.
+        this._time.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this._record = chip('kelp-chip-record', [this._time],
+            () => this._privacy.stopRecording(), true);
+        this._record.accessible_name = 'Stop recording';
+        this._cast = chip('kelp-chip-cast', [icon('screen-shared-symbolic')],
+            () => this._privacy.stopSharing(), true);
+        this._cast.accessible_name = 'Stop sharing the screen';
+        this._micIcon = icon('audio-input-microphone-symbolic');
+        this._mic = chip('kelp-chip-mic', [this._micIcon],
+            () => this._privacy.toggleMicrophone());
+        this._mic.accessible_name = 'Mute the microphone';
+        this._camera = chip('kelp-chip-camera', [icon('camera-web-symbolic')], null);
+        this._camera.accessible_name = 'Camera in use';
+
+        this._chips = new ChipBox(4 * scaleFactor());
+        for (const child of [this._record, this._cast, this._mic, this._camera])
+            this._chips.add_child(child);
+        // As in the system card: the padding is on the box of the chips,
+        // which is cut off at the border of the card while it closes.
+        const surface = new St.Bin({
+            style_class: 'kelp-card kelp-card-cut',
+            child: new FullHeight(this._chips),
+        });
+        this.actor = sidebar.backdrop.wrap(surface, '', {x_expand: true, visible: false}, true);
+        this.slot = new CardSlot(this.actor);
+        this._shown = false;
+
+        this._privacy.onChanged(() => this._sync());
+        this._sync();
+    }
+
+    _sync() {
+        if (!this._chips)
+            return;
+        const p = this._privacy;
+        const any = p.recording || p.sharing > 0 || !!p.microphone || p.camera;
+        if (!any) {
+            // The chips stay as they are while the card closes.
+            this._shown = false;
+            this.slot.setShown(false);
+            return;
+        }
+        // A card that is hidden, or on its way there, gets its chips in
+        // one frame: it is the card that opens.
+        const animate = this._shown && this.actor.mapped;
+        const seconds = p.recordingSeconds;
+        const pad = n => String(n).padStart(2, '0');
+        const [h, m] = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60];
+        if (p.recording)
+            this._time.text = `${h > 0 ? `${h}:${pad(m)}` : m}:${pad(seconds % 60)}`;
+        this._micIcon.icon_name = p.microphone === 'muted'
+            ? 'microphone-disabled-symbolic' : 'audio-input-microphone-symbolic';
+        if (p.microphone === 'muted')
+            this._mic.add_style_class_name('muted');
+        else if (p.microphone)
+            this._mic.remove_style_class_name('muted');
+        const shown = [];
+        if (p.recording)
+            shown.push(this._record);
+        if (p.sharing > 0)
+            shown.push(this._cast);
+        if (p.microphone)
+            shown.push(this._mic);
+        if (p.camera)
+            shown.push(this._camera);
+        this._chips.setShown(shown, animate);
+        this._shown = true;
+        this.slot.setShown(true);
+    }
+
+    setCollapsed(collapsed) {
+        // The collapsed card has room for one thing in a chip: the stop
+        // button of the recording, the icon of the sharing.
+        this._time.visible = !collapsed;
+        this._cast.child.last_child.visible = !collapsed;
+        for (const stops of [this._record, this._cast]) {
+            stops.child.x_align = collapsed
+                ? Clutter.ActorAlign.CENTER : Clutter.ActorAlign.FILL;
+        }
+        this._chips.column = collapsed;
+    }
+
+    destroy() {
+        this._chips = null;
+    }
+}
+
 // On mains power and not charging, the battery counts as full from this
 // charge, percent.
 const BATTERY_FULL_PERCENT = 95;
@@ -2910,9 +3269,9 @@ class ControlsCard {
      * The shell's own icons are always shown: each says that something is
      * the case now (the network, a connected Bluetooth device, a microphone
      * or camera in use, a power mode other than "balanced"). So is the
-     * battery. Two of the shell's icons are not: the speaker while the
-     * volume row is shown, and night light unless sidebar.statusFill names
-     * it.
+     * battery. Four of the shell's icons are not: the speaker while the
+     * volume row is shown, night light unless sidebar.statusFill names it,
+     * and the microphone and the camera, which the privacy card shows.
      *
      * While those take less than STATUS_PLACES places, the icons of
      * sidebar.statusFill are added in their order until the places are
@@ -2930,6 +3289,8 @@ class ControlsCard {
         const shown = {
             _volumeOutput: !this._volume?.actor.visible,
             _nightLight: order.includes('nightLight'),
+            _volumeInput: false,
+            _camera: false,
         };
         for (const [name, wanted] of Object.entries(shown)) {
             const box = this._qs?.[name] ?? null;
@@ -3057,8 +3418,8 @@ class ControlsCard {
         }
         this._watched.clear();
         this._fills = null;
-        // The two the row hid are shown again as the shell shows them.
-        for (const name of ['_volumeOutput', '_nightLight']) {
+        // The ones the row hid are shown again as the shell shows them.
+        for (const name of ['_volumeOutput', '_nightLight', '_volumeInput', '_camera']) {
             const box = this._qs?.[name] ?? null;
             if (box)
                 box.visible = box.get_children().some(c => c.visible);
@@ -3523,8 +3884,9 @@ class VolumeRow {
 // ---------------------------------------------------------------- sidebar
 
 export class Sidebar {
-    constructor({config, backdrop, tiling, tweaks, cheatsheet}) {
+    constructor({config, backdrop, tiling, tweaks, cheatsheet, privacy}) {
         this.config = config;
+        this.privacy = privacy;
         this.backdrop = backdrop;
         this.tiling = tiling;
         this.tweaks = tweaks;
@@ -3625,9 +3987,10 @@ export class Sidebar {
         this._notifications = new NotificationsCard(this);
         this._downloads = new DownloadsCard(this);
         this._system = new SystemCard(this);
+        this._privacy = new PrivacyCard(this);
         this._controls = new ControlsCard(this);
         this._cards = [this._clock, this._minimap, this._media, this._notifications,
-            this._downloads, this._system, this._controls];
+            this._downloads, this._system, this._privacy, this._controls];
         // The whole of a card stops a click, its padding too.
         for (const card of this._cards)
             card.actor.reactive = true;
@@ -3655,11 +4018,14 @@ export class Sidebar {
         this._spacer.connect('notify::height', () => this.syncRoom());
         this.actor.add_child(this._spacer);
         this.actor.add_child(this._downloads.actor);
-        // The system card with the spacing under it, and the controls
-        // card, in a box with no spacing of its own: see CardSlot.
+        // The system card and the privacy card, each with the spacing
+        // under it, and the controls card, in a box with no spacing of its
+        // own: see CardSlot.
         this._systemSlot = new CardSlot(this._system.actor);
+        this._gapSlots.push(this._privacy.slot);
         const bottom = new St.BoxLayout({orientation: VERTICAL, x_expand: true});
         bottom.add_child(this._systemSlot);
+        bottom.add_child(this._privacy.slot);
         bottom.add_child(this._controls.actor);
         this.actor.add_child(bottom);
 

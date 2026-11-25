@@ -6,6 +6,7 @@
 #   native/drag.c          dragging files from the shell into a Wayland client
 #   native/scroll.c        touchpad scroll events, given to the extension first
 #   native/x11size.c       the size of X11 windows after the Xwayland scale changes
+#   native/capture.c       what each screen cast shows, and marks no cast shows
 #
 #   dev/build-native.sh
 #
@@ -24,7 +25,7 @@ mkdir -p "$OUT"
 # -z now: every function is looked up when a module is loaded. A shell
 # without one of them then refuses the module, and does not stop at the first
 # call of that function.
-for name in decorations drag scroll x11size; do
+for name in decorations drag scroll x11size capture; do
     # shellcheck disable=SC2046
     gcc -shared -fPIC -O2 -Wall -Wextra -Wno-unused-parameter -Wl,-z,now \
         $(pkg-config --cflags gio-2.0) \

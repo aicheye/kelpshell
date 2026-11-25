@@ -91,6 +91,9 @@ export const DEFAULTS = {
     notifications: {
         bannerPosition: 'right',   // 'left' | 'center' | 'right'
     },
+    privacy: {
+        marks: true,          // a glow on a monitor, a line around an area and an outline on a window that is recorded or shared
+    },
     lock: {
         onLidClose: true,     // closing the lid locks at once when the laptop's panel is the only display, also when no suspend follows
     },

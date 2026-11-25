@@ -111,6 +111,12 @@
     "bannerPosition": "right"   // "left", "center" or "right"
   },
 
+  "privacy": {
+    "marks": true         // a glow along the edges of a monitor, a line around an area and
+                          // an outline on a window while it is recorded or shared. They are
+                          // not in the recording
+  },
+
   "lock": {
     "onLidClose": true    // closing the lid locks at once when the laptop's panel is the
                           // only display, also when no suspend follows (see README)
