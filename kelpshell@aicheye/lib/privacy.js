@@ -48,6 +48,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 
+import {holdInPlace} from './castplace.js';
 import {visibleRect} from './crop.js';
 
 const MARK_MS = 200;
@@ -58,8 +59,10 @@ const TONES = {
     cast: [192, 97, 203],
 };
 
-// The glow of a monitor reaches GLOW px in from each edge.
+// The glow of a monitor reaches GLOW px in from each edge, where its
+// opacity is GLOW_PEAK.
 const GLOW = 40;
+const GLOW_PEAK = 0.65;
 // How dark everything around a recorded or shared area is: black at 30%,
 // as the shell has it.
 const SHADE = new Cogl.Color({red: 0, green: 0, blue: 0, alpha: 77});
@@ -173,8 +176,8 @@ function monitorMark(monitor, tone) {
     const actor = new Clutter.Actor({
         x: monitor.x, y: monitor.y, width, height, clip_to_allocation: true,
     });
-    const column = glow(tone, 'column', GLOW, 0.85, 3);
-    const row = glow(tone, 'row', GLOW, 0.85, 3);
+    const column = glow(tone, 'column', GLOW, GLOW_PEAK, 3);
+    const row = glow(tone, 'row', GLOW, GLOW_PEAK, 3);
     // The strips lie over each other in the corners, where two edges glow.
     actor.add_child(piece(column, 0, 0, width, GLOW));
     actor.add_child(piece(column, 0, height - GLOW, width, GLOW, false, true));
@@ -270,6 +273,7 @@ export class Privacy {
     constructor(config) {
         this._config = config;
         this._listeners = [];
+        this.tiling = null;   // set by extension.js
     }
 
     enable() {
@@ -321,6 +325,7 @@ export class Privacy {
         this._pending = null;    // the area of a recording that starts (handOff)
         this._shades = new Set(); // the darkening around each recorded window
         this._castWindows = new Map();   // window id -> 'record' or 'cast'
+        this._holds = new Map();         // window id -> {win, release}, see _syncHolds
         this._followId = 0;
         this._checking = false;
         global.display.connectObject('window-created', () => this._syncMarks(), this);
@@ -356,6 +361,12 @@ export class Privacy {
         }
         this._marks.clear();
         this._marks = null;
+        for (const hold of this._holds.values()) {
+            hold.release();
+            this.tiling?.setFullSize(hold.win, false);
+        }
+        this._holds.clear();
+        this._castWindows.clear();
         for (const shade of [...this._shades])
             shade.destroy();
         this._native?.emit('set-root', null);
@@ -551,8 +562,37 @@ export class Privacy {
         const same = now.size === this._castWindows.size &&
             [...now].every(([id, tone]) => this._castWindows.get(id) === tone);
         this._castWindows = now;
+        this._syncHolds();
         if (!same)
             this._changed();
+    }
+
+    /**
+     * A window that an app shares is drawn at full size for as long, and
+     * is in the cast where Mutter has it, whole, wherever its tile is on
+     * the strip (lib/castplace.js). lib/shot.js does the same for a window
+     * it records, with the drawn part at the corner of the picture.
+     */
+    _syncHolds() {
+        const shared = id => this._castWindows.get(id) === 'cast';
+        for (const [id, hold] of this._holds) {
+            if (shared(id) && hold.win.get_compositor_private())
+                continue;
+            this._holds.delete(id);
+            hold.release();
+            // A window that is recorded now is held by lib/shot.js.
+            if (!this._castWindows.has(id))
+                this.tiling?.setFullSize(hold.win, false);
+        }
+        for (const id of this._castWindows.keys()) {
+            if (!shared(id) || this._holds.has(id))
+                continue;
+            const win = global.display.list_all_windows().find(w => w.get_id() === id);
+            if (!win?.get_compositor_private())
+                continue;
+            this._holds.set(id, {win, release: holdInPlace(this._config, win, false, false)});
+            this.tiling?.setFullSize(win, true);
+        }
     }
 
     /** What is to be marked: key -> {kind, tone, monitor, rect, win}. */

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Where a window lies in the picture of a recording of it (lib/windowrec.js).
+// Where a window lies in the picture of a cast of it: a recording
+// (lib/windowrec.js), or what an app shares (lib/privacy.js).
 //
 // Mutter makes each frame of a cast of a window in one of two ways. A
 // window with one surface whose buffer it can read is copied from that
@@ -18,11 +19,14 @@
 // edge by the height of the shadow above it.
 //
 // CastPlace is an effect on the window's actor. In a paint for the cast it
-// takes the actor's translation and scale away again and moves the part of
-// the window that is drawn (lib/crop.js) to the corner of the picture. The
-// window is painted by itself there, without the shade of the sidebar. The
-// stage is painted with perspective and a cast without, which is how the
-// two are told apart.
+// takes the actor's translation and scale away again. For a recording it
+// also moves the part of the window that is drawn (lib/crop.js) to the
+// corner of the picture, which the recorder cuts the picture to. An app
+// that shares a window is told by Mutter where the frame is in the
+// picture, so there the window stays where Mutter has it. The window is
+// painted by itself, without the shade of the sidebar. The stage is
+// painted with perspective and a cast without, which is how the two are
+// told apart.
 //
 // A tile that is partly out of its strip's view is cut there with the clip
 // of its actor, which a paint for the cast would be cut by too. While the
@@ -47,11 +51,12 @@ export const CAST_PLACE = 'kelp-cast-place';
 
 const CastPlace = GObject.registerClass(
 class KelpCastPlace extends Clutter.Effect {
-    _init(config, win, pointer) {
+    _init(config, win, pointer, corner) {
         super._init();
         this._config = config;
         this._win = win;
         this._pointer = pointer;
+        this._corner = corner;
         // What the window is cut to on the screen, in its actor: [x, y,
         // width, height], or null.
         this.clip = null;
@@ -107,7 +112,8 @@ class KelpCastPlace extends Clutter.Effect {
      * What a paint for a cast is transformed by before the actor's own
      * transform, or null in every other paint. The actor's transform is
      * its translation and scale and then its position. In their place the
-     * actor is moved to its position less the corner of the drawn part.
+     * actor is moved to its position, less the corner of the drawn part
+     * for a recording.
      */
     _move(framebuffer) {
         if (global.stage.peek_stage_views().some(view => view.get_framebuffer() === framebuffer))
@@ -119,13 +125,15 @@ class KelpCastPlace extends Clutter.Effect {
         if (!ok)
             return null;
         const box = actor.get_allocation_box();
-        const shown = visibleRect(this._config, this._win);
-        const buffer = this._win.get_buffer_rect();
-        return new Graphene.Matrix().init_translate(new Graphene.Point3D({
-            x: box.x1 - (shown.x - buffer.x),
-            y: box.y1 - (shown.y - buffer.y),
-            z: 0,
-        })).multiply(inverse);
+        let [x, y] = [box.x1, box.y1];
+        if (this._corner) {
+            const shown = visibleRect(this._config, this._win);
+            const buffer = this._win.get_buffer_rect();
+            x -= shown.x - buffer.x;
+            y -= shown.y - buffer.y;
+        }
+        return new Graphene.Matrix().init_translate(new Graphene.Point3D({x, y, z: 0}))
+            .multiply(inverse);
     }
 
     /** The pointer, while it is on the window. */
@@ -161,16 +169,17 @@ class KelpCastPlace extends Clutter.Effect {
 
 /**
  * Keep a window in place in the casts of it from now on. pointer: the
- * pointer is drawn into them. Returns a function that ends it. The tile
+ * pointer is drawn into them. corner: the drawn part of the window is at
+ * the corner of the picture. Returns a function that ends it. The tile
  * is synced after that (Tiling.setFullSize), which gives the actor its
  * clip again.
  */
-export function holdInPlace(config, win, pointer) {
+export function holdInPlace(config, win, pointer, corner = true) {
     const actor = win.get_compositor_private();
     if (!actor)
         return () => {};
     actor.remove_effect_by_name(CAST_PLACE);
-    const effect = new CastPlace(config, win, pointer);
+    const effect = new CastPlace(config, win, pointer, corner);
     if (actor.has_clip) {
         effect.clip = actor.get_clip();
         actor.remove_clip();

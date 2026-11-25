@@ -236,6 +236,7 @@ export default class Kelpshell extends Extension {
         // After the decorations, which load the native modules, and before
         // the sidebar, which has a card for it.
         this.privacy = new Privacy(this.config);
+        this.privacy.tiling = this.tiling;
         this.privacy.enable();
         this.shot = new Shot(this.config, this.backdrop, this.privacy, this.tiling);
         this.shot.enable();

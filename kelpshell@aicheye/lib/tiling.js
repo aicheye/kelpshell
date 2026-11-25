@@ -3394,12 +3394,13 @@ class FocusRing {
     _wanted() {
         const win = this.win;
         // hidden: the window is being dragged through the sidebar as an icon.
-        if (!win || this.hidden || !this.wm.config.values.focusRing.enabled)
+        // covered: the window picker of lib/shot.js draws the ring itself.
+        if (!win || this.hidden || this.covered || !this.wm.config.values.focusRing.enabled)
             return false;
         if (win.is_fullscreen() || win.minimized || this._held())
             return false;
-        // A window that is recorded has the outline of lib/privacy.js on
-        // it, with the focus and without.
+        // A window that is recorded or shared has the outline of
+        // lib/privacy.js on it, with the focus and without.
         if (this.wm.fullSize.has(win))
             return false;
         const type = win.get_window_type();
@@ -4540,9 +4541,9 @@ export class Tiling {
 
     /**
      * Keep a window drawn as the one with the focus while it has none (on),
-     * or let it be drawn smaller again. A recording of a window shows the
-     * window as it is drawn, so a recorded window is kept at full size, and
-     * the ring leaves it to the outline that marks it.
+     * or let it be drawn smaller again. A cast of a window shows the window
+     * as it is drawn, so a recorded or shared window is kept at full size,
+     * and the ring leaves it to the outline that marks it.
      */
     setFullSize(win, on) {
         if (on)

@@ -57,6 +57,9 @@ const MOVE_MS = 200;
 // that is not the chosen one, and how long it takes to come and go.
 const HOVER_OPACITY = 130;
 const HOVER_MS = 80;
+// After a window is chosen the pointer has to move this far, px, before a
+// window under it gets that ring again.
+const HOVER_AWAY = 8;
 
 const text = Gettext.domain('gnome-shell').gettext;
 
@@ -154,6 +157,7 @@ export class Shot {
         this._holes = [];        // the two clear places, see enable
         this._front = 0;         // which of them is on the chosen window
         this._pointed = null;    // the entry under the pointer, if it is not chosen
+        this._chosenAt = null;   // where the pointer was when a window was chosen, see _choose
         this._tickId = 0;
         this._wins = new Map();  // the shell's entry for a window -> the window
         this._cell = null;       // the icon in the sidebar the pointer is on
@@ -499,6 +503,9 @@ export class Shot {
     /** The pointer is here: the window under it has a faint ring. */
     _point(x, y) {
         this._pointer = [x, y];
+        const away = HOVER_AWAY * St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        if (this._chosenAt && Math.hypot(x - this._chosenAt[0], y - this._chosenAt[1]) >= away)
+            this._chosenAt = null;
         this._repoint();
         this._place();
         return Clutter.EVENT_PROPAGATE;
@@ -511,7 +518,7 @@ export class Shot {
     _repoint() {
         const {entry, cell} = this._at(...this._pointer ?? [-1, -1]);
         this._setCell(cell);
-        const pointed = entry && !entry.widget.checked ? entry : null;
+        const pointed = entry && !entry.widget.checked && !this._chosenAt ? entry : null;
         const shown = !!pointed?.rect;
         if (pointed === this._pointed && shown === this._hoverShown)
             return;
@@ -529,10 +536,20 @@ export class Shot {
      * its column slides to the middle of the view. Its clear place is on
      * it from the start and gets clear as the one of the window before
      * gets dark (_place).
+     *
+     * The ring of the window under the pointer is gone at once and stays
+     * away until the pointer has moved: the windows slide now, and the
+     * ring would come and go on each one that passes under a pointer that
+     * rests where the click was.
      */
     _choose(animate) {
         const entry = this._entries.find(e => e.widget.checked) ?? null;
         const [front, back] = [this._holes[this._front], this._holes[1 - this._front]];
+        this._chosenAt = [...this._pointer ?? [-1, -1]];
+        this._hover.remove_all_transitions();
+        this._hover.opacity = 0;
+        this._hoverShown = false;
+        this._pointed = null;
         this._repoint();
         front.actor.remove_all_transitions();
         back.actor.remove_all_transitions();
@@ -720,6 +737,13 @@ export class Shot {
         const picker = this._picker;
         animate &&= St.Settings.get().enable_animations;
         picker.remove_all_transitions();
+        // The ring of the chosen window is drawn here, at once. The ring of
+        // lib/tiling.js would fade in under it on every window that is
+        // chosen.
+        if (this._tiling) {
+            this._tiling.ring.covered = shown;
+            this._tiling.ring.sync();
+        }
         if (!shown) {
             this._entries = [];
             this._pointed = null;
@@ -761,6 +785,8 @@ export class Shot {
         this._hover.opacity = 0;
         this._hoverShown = false;
         this._pointed = null;
+        // Where the pointer is now is not known until it moves.
+        this._pointer = null;
         picker.show();
         this._syncFrozen(animate);
         this._choose(false);
