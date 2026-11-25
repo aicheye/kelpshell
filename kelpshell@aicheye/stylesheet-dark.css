@@ -1498,9 +1498,9 @@
   color: #f4f4f6;
   font-size: 12px;
 }
-/* The selected area has the ring of lib/shot.js, and no handles: a corner
-   or a side is taken where the shell has it. The darkening around the area
-   is SELECT_SHADE there. */
+/* The selected area and the chosen window have the ring of lib/shot.js,
+   and the area has no handles: a corner or a side is taken where the shell
+   has it. The darkening around them is SELECT_SHADE there. */
 .kelp-shot .screenshot-ui-area-selector .screenshot-ui-area-indicator-shade {
   background-color: rgba(0, 0, 0, 0.5);
 }
@@ -1510,24 +1510,6 @@
 .kelp-shot .screenshot-ui-area-selector-handle {
   background-color: transparent;
   box-shadow: none;
-}
-/* The list of windows. A window that is chosen has the ring of the focused
-   window, 2px outside its 15px corners, and no check mark. */
-.kelp-shot .screenshot-ui-window-selector-window-border {
-  border: 2px transparent;
-  border-radius: 17px;
-  transition-duration: 160ms;
-}
-.kelp-shot .screenshot-ui-window-selector-window:hover .screenshot-ui-window-selector-window-border {
-  border-color: rgba(255, 255, 255, 0.28); /* light: keep */
-}
-.kelp-shot .screenshot-ui-window-selector-window:checked .screenshot-ui-window-selector-window-border {
-  border-color: rgba(255, 255, 255, 0.55); /* light: keep */
-  background-color: transparent;
-}
-.kelp-shot .screenshot-ui-window-selector-window:checked .screenshot-ui-window-selector-check {
-  color: transparent;
-  background-color: transparent;
 }
 /* A screen that is chosen is the one that is not darkened. */
 .kelp-shot .screenshot-ui-screen-selector:checked {

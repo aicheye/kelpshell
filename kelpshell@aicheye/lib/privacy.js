@@ -121,11 +121,11 @@ function picture(data, w, h) {
 }
 
 /**
- * The upper left corner of an area that is shown with round corners, as
- * the windows are: black at `shade` (0 to 1) where the area is outside the
+ * The upper left corner of a place that is shown with round corners, as a
+ * window is: black at `shade` (0 to 1) where the place is outside the
  * curve of `radius` px, and around the curve a ring `width` px wide of
  * `color` (a Cogl.Color, or null for no ring). The picture is radius + width
- * px square, and the corner of the area is `width` px in from its upper
+ * px square, and the corner of the place is `width` px in from its upper
  * left. Two samples for each px, and each edge is one sample wide.
  */
 export function cornerPicture(radius, shade, color = null, width = 0) {
@@ -153,21 +153,6 @@ export function cornerPicture(radius, shade, color = null, width = 0) {
     content = picture(data, n, n);
     contents.set(key, content);
     return content;
-}
-
-/**
- * The radius of the corners of an area and the width of the ring around a
- * selected one, in px of the stage: those of the focused window
- * (focusRing), for an area w by h.
- */
-export function areaShape(config, w, h) {
-    const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-    const ring = config.values.focusRing;
-    const radius = Math.max(0, Math.round(ring.radius)) * scale;
-    return {
-        radius: Math.min(radius, Math.floor(w / 2), Math.floor(h / 2)),
-        width: Math.max(1, Math.round(ring.width)) * scale,
-    };
 }
 
 /** An actor that shows a picture at a place, mirrored where asked. */
@@ -212,24 +197,6 @@ function areaMark(rect) {
             actor.add_child(new Clutter.Actor({x, y, width: w, height: h, background_color: SHADE}));
     }
     Shell.util_set_hidden_from_pick(actor, true);
-    return actor;
-}
-
-/**
- * The corners of an area in the darkening of areaMark(), round as those of
- * the windows. They are in the area, so the native module paints them.
- */
-function areaCorners(config, rect) {
-    const {radius} = areaShape(config, rect.width, rect.height);
-    const actor = new Clutter.Actor();
-    if (radius < 1)
-        return actor;
-    const content = cornerPicture(radius, SHADE.alpha / 255);
-    const [x2, y2] = [rect.x + rect.width - radius, rect.y + rect.height - radius];
-    actor.add_child(piece(content, rect.x, rect.y, radius, radius));
-    actor.add_child(piece(content, x2, rect.y, radius, radius, true, false));
-    actor.add_child(piece(content, rect.x, y2, radius, radius, false, true));
-    actor.add_child(piece(content, x2, y2, radius, radius, true, true));
     return actor;
 }
 
@@ -582,14 +549,11 @@ export class Privacy {
                 fadeOut(mark.actor, () => this._rootLeft());
             else
                 fadeOut(mark.actor);
-            if (mark.corners)
-                fadeOut(mark.corners, () => this._rootLeft());
         }
         for (const [key, want] of wanted) {
             if (this._marks.has(key))
                 continue;
             let actor = null;
-            let corners = null;
             const painted = this._native && want.kind === 'monitor';
             if (want.kind === 'window') {
                 actor = this._windowMark(want.win, want.tone);
@@ -602,20 +566,13 @@ export class Privacy {
                 // module paints.
                 actor = areaMark(want.rect);
                 global.stage.add_child(actor);
-                if (this._native) {
-                    corners = areaCorners(this._config, want.rect);
-                    this._ensureRoot().add_child(corners);
-                    this._painted++;
-                    fadeIn(corners);
-                } else if (this._root) {
+                if (this._root)
                     global.stage.set_child_above_sibling(this._root, null);
-                }
             }
             if (!actor)
                 continue;
             fadeIn(actor);
-            this._marks.set(key,
-                {actor, corners, tone: want.tone, win: want.win ?? null, painted});
+            this._marks.set(key, {actor, tone: want.tone, win: want.win ?? null, painted});
         }
         // A window that is shown alone on its monitor is otherwise shown
         // without the compositor, and nothing is painted over it.

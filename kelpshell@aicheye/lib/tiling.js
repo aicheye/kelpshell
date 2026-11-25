@@ -3382,6 +3382,10 @@ class FocusRing {
             return false;
         if (win.is_fullscreen() || win.minimized || this._held())
             return false;
+        // A window that is recorded has the outline of lib/privacy.js on
+        // it, with the focus and without.
+        if (this.wm.fullSize.has(win))
+            return false;
         const type = win.get_window_type();
         return type === Meta.WindowType.NORMAL || type === Meta.WindowType.DIALOG ||
             type === Meta.WindowType.MODAL_DIALOG || type === Meta.WindowType.UTILITY;
@@ -3394,11 +3398,7 @@ class FocusRing {
             return;
         }
         const tile = this.wm.tiles.get(this.win);
-        // A window on no strip that a key is moving, see Floater.
-        const floater = tile ? null : this.wm.floaters.get(this.win);
-        let frame = tile && tile.target && !tile.grabbed
-            ? tile.drawn()
-            : tile?.heldRect() ?? floater?.drawn() ?? visibleRect(this.wm.config, this.win);
+        let frame = this.wm.drawnRect(this.win);
         // An attached dialog is drawn away from its frame, see
         // Tile._syncDialogs.
         const moved = !tile && this.wm.hostOf(this.win) ? this.win.get_compositor_private() : null;
@@ -4519,9 +4519,10 @@ export class Tiling {
     }
 
     /**
-     * Keep a window at full size while it has no focus (on), or let it be
-     * drawn smaller again. A recording of a window shows the window as it
-     * is drawn, so a recorded window is kept.
+     * Keep a window drawn as the one with the focus while it has none (on),
+     * or let it be drawn smaller again. A recording of a window shows the
+     * window as it is drawn, so a recorded window is kept at full size, and
+     * the ring leaves it to the outline that marks it.
      */
     setFullSize(win, on) {
         if (on)
@@ -4530,6 +4531,20 @@ export class Tiling {
             this.fullSize.delete(win);
         const tile = this.tiles.get(win);
         tile?.setCurrent(tile === this.currentTile, true);
+        this.ring.sync();
+    }
+
+    /**
+     * Where a window is drawn now, {x, y, width, height}: its place on the
+     * strip with its scale if it is tiled, else its frame.
+     */
+    drawnRect(win) {
+        const tile = this.tiles.get(win);
+        if (tile?.target && !tile.grabbed)
+            return tile.drawn();
+        // A window on no strip that a key is moving has a Floater.
+        return tile?.heldRect() ?? this.floaters.get(win)?.drawn() ??
+            visibleRect(this.config, win);
     }
 
     /**

@@ -42,9 +42,9 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 
 A monitor that is recorded or shared has a glow along its edges, red for a recording and purple for sharing, and a window has an outline. Around a recorded or shared area the screen is darkened, as the shell does it. None of it is in the recording.
 
-The shell's panel for screenshots and recordings has the look of the cards. The selected area is shown as a focused window is, with round corners and the ring. In the list of windows, each window comes from its place on the screen and goes back there, and the ones that are not chosen are dimmed. When a recording starts, the panel fades out on the screen and not in the recording.
+The shell's panel for screenshots and recordings has the look of the cards. The selected area has the ring of the focused window around it. A window is chosen where it is on the screen: the chosen one is clear with the ring and everything else is darkened, as around an area. When a recording starts, the panel fades out on the screen and not in the recording.
 
-A window can be recorded, which the shell leaves out. The recording is of the window itself, also while another window covers it or the strip scrolls it away.
+A window can be recorded, which the shell leaves out. The recording is of the window itself, also while another window covers it or the strip scrolls it away. A recorded window is drawn as the focused one for as long, with a red outline in place of the ring.
 
 The calendar and quick settings open next to their cards.
 
