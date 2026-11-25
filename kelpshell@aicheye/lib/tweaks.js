@@ -142,6 +142,7 @@ export class Tweaks {
         }, this);
 
         this._styleMenus(true);
+        this._clipStacks(true);
 
         // The shell is dark unless the "color-scheme" setting is
         // "prefer-light", so with the light style of Settings ("default")
@@ -496,6 +497,78 @@ export class Tweaks {
         }
     }
 
+    /**
+     * The notifications of one app are a stack in the calendar popup: the
+     * newest lies over the others, and each of the others shows 10 px or
+     * less under the one before it. In the shell a notification has an
+     * opaque fill, which hides what is under it. With the fill of the
+     * popup here (.kelp-menu .message) the text of every notification
+     * under the first shows through it. So each one is cut to the part
+     * that is under the lower edge of the one before it, in a stack and
+     * while the stack opens and closes.
+     */
+    _clipStacks(on) {
+        const view = Main.panel.statusArea.dateMenu?._messageList?._messageView;
+        if (!view)
+            return;
+        // The view has each group in a bin of its own.
+        const groups = () => view.get_children().map(bin => bin.child)
+            .filter(group => group?._cover && group._headerBox);
+        const messages = group => group.get_children()
+            .filter(item => item !== group._cover && item !== group._headerBox);
+        if (!on) {
+            view.disconnectObject(this);
+            for (const group of groups()) {
+                group.disconnectObject(this);
+                for (const item of messages(group)) {
+                    item.disconnectObject(this);
+                    item.remove_clip();
+                }
+            }
+            return;
+        }
+        const clip = group => {
+            // The lower edge of the notification before, in the group. A
+            // notification is drawn inside its item, less its margin.
+            let edge = null;
+            for (const item of messages(group)) {
+                const box = item.get_allocation_box();
+                const over = edge === null ? 0 : Math.ceil(edge - box.y1);
+                if (over > 0)
+                    item.set_clip(0, over, box.get_width(), Math.max(0, box.get_height() - over));
+                else
+                    item.remove_clip();
+                const drawn = item.child?.has_allocation() ? item.child.get_allocation_box() : null;
+                edge = box.y1 + (drawn ? drawn.y2 : box.get_height());
+            }
+        };
+        const follow = (group, item) => {
+            if (item !== group._cover && item !== group._headerBox)
+                item.connectObject('notify::allocation', () => clip(group), this);
+        };
+        const track = group => {
+            group.connectObject(
+                'child-added', (_g, item) => {
+                    follow(group, item);
+                    clip(group);
+                },
+                'child-removed', (_g, item) => {
+                    item.disconnectObject(this);
+                    clip(group);
+                },
+                'notify::allocation', () => clip(group), this);
+            for (const item of group.get_children())
+                follow(group, item);
+            clip(group);
+        };
+        view.connectObject('child-added', (_v, bin) => {
+            if (bin.child?._cover && bin.child._headerBox)
+                track(bin.child);
+        }, this);
+        for (const group of groups())
+            track(group);
+    }
+
     /** Apply the parts that depend on the config. */
     apply() {
         const v = this._config.values;
@@ -550,6 +623,7 @@ export class Tweaks {
         for (const source of this._sources)
             source.disconnectObject(this);
         this._sources.clear();
+        this._clipStacks(false);
         this._styleMenus(false);
 
         // Only what enable() got as far as saving is put back.
