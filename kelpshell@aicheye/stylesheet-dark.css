@@ -1338,6 +1338,188 @@
   background-color: rgba(255, 255, 255, 0.16);
 }
 
+/* ---------- screenshot and recording panel ---------- */
+
+/* The shell's panel (lib/shot.js). A declaration here replaces the shell's
+   whatever the selectors, so the fill of every state of a button is given
+   again. The panel is 20px with a 1px border and 8px of padding, so what is
+   in it is 11px, and the parts of the switch are 3px inside that. */
+.kelp-shadow-shot {
+  border-radius: 20px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
+}
+.kelp-shot .screenshot-ui-panel {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  padding: 8px;
+  spacing: 8px;
+  color: #f4f4f6;
+  font-size: 13px;
+}
+.kelp-shot .screenshot-ui-type-button {
+  border-radius: 11px;
+  padding: 10px 14px;
+  min-width: 52px;
+  color: rgba(255, 255, 255, 0.62);
+  background-color: transparent;
+  box-shadow: none;
+  transition-duration: 120ms;
+}
+.kelp-shot .screenshot-ui-type-button .icon-label-button-container {
+  font-size: 12px;
+  font-weight: 700;
+  spacing: 6px;
+}
+.kelp-shot .screenshot-ui-type-button .icon-label-button-container > StIcon {
+  icon-size: 24px;
+}
+.kelp-shot .screenshot-ui-type-button:hover,
+.kelp-shot .screenshot-ui-type-button:focus,
+.kelp-shot .screenshot-ui-type-button:focus:hover {
+  color: #f4f4f6;
+  background-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+.kelp-shot .screenshot-ui-type-button:active,
+.kelp-shot .screenshot-ui-type-button:active:hover,
+.kelp-shot .screenshot-ui-type-button:active:focus,
+.kelp-shot .screenshot-ui-type-button:checked,
+.kelp-shot .screenshot-ui-type-button:checked:focus {
+  color: #f4f4f6;
+  background-color: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+.kelp-shot .screenshot-ui-type-button:checked:hover,
+.kelp-shot .screenshot-ui-type-button:checked:active {
+  color: #f4f4f6;
+  background-color: rgba(255, 255, 255, 0.18);
+}
+.kelp-shot .screenshot-ui-type-button:insensitive {
+  color: rgba(255, 255, 255, 0.30);
+  background-color: transparent;
+}
+/* The switch between a screenshot and a recording: the look of the tabs
+   of the picker. */
+.kelp-shot .screenshot-ui-shot-cast-container {
+  padding: 3px;
+  spacing: 3px;
+  border-radius: 11px;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.kelp-shot .screenshot-ui-shot-cast-button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.50);
+  background-color: transparent;
+  transition-duration: 80ms;
+}
+.kelp-shot .screenshot-ui-shot-cast-button:hover,
+.kelp-shot .screenshot-ui-shot-cast-button:focus,
+.kelp-shot .screenshot-ui-shot-cast-button:active {
+  color: rgba(255, 255, 255, 0.85);
+  background-color: transparent;
+}
+.kelp-shot .screenshot-ui-shot-cast-button:checked {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.13);
+}
+.kelp-shot .screenshot-ui-shot-cast-button:insensitive {
+  color: rgba(255, 255, 255, 0.30);
+}
+.kelp-shot .screenshot-ui-show-pointer-button {
+  border-radius: 11px;
+  padding: 9px;
+  color: rgba(255, 255, 255, 0.62);
+  background-color: transparent;
+  box-shadow: none;
+  transition-duration: 120ms;
+}
+.kelp-shot .screenshot-ui-show-pointer-button StIcon {
+  icon-size: 16px;
+}
+.kelp-shot .screenshot-ui-show-pointer-button:hover,
+.kelp-shot .screenshot-ui-show-pointer-button:focus,
+.kelp-shot .screenshot-ui-show-pointer-button:focus:hover {
+  color: #f4f4f6;
+  background-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+.kelp-shot .screenshot-ui-show-pointer-button:active,
+.kelp-shot .screenshot-ui-show-pointer-button:active:hover,
+.kelp-shot .screenshot-ui-show-pointer-button:active:focus,
+.kelp-shot .screenshot-ui-show-pointer-button:checked,
+.kelp-shot .screenshot-ui-show-pointer-button:checked:focus {
+  color: #f4f4f6;
+  background-color: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+.kelp-shot .screenshot-ui-show-pointer-button:checked:hover,
+.kelp-shot .screenshot-ui-show-pointer-button:checked:active {
+  color: #f4f4f6;
+  background-color: rgba(255, 255, 255, 0.18);
+}
+/* The ring of the button that takes the picture, and its red middle for a
+   recording: the red of the recording chip. */
+.kelp-shot .screenshot-ui-capture-button {
+  border: 3px rgba(255, 255, 255, 0.90);
+  padding: 3px;
+}
+.kelp-shot .screenshot-ui-capture-button:cast .screenshot-ui-capture-button-circle {
+  background-color: #e01b24; /* light: keep */
+}
+.kelp-shot .screenshot-ui-capture-button:cast:hover .screenshot-ui-capture-button-circle,
+.kelp-shot .screenshot-ui-capture-button:cast:focus .screenshot-ui-capture-button-circle {
+  background-color: #ed333b; /* light: keep */
+}
+.kelp-shot .screenshot-ui-capture-button:cast:active .screenshot-ui-capture-button-circle {
+  background-color: #c01c28; /* light: keep */
+}
+.kelp-shot .screenshot-ui-close-button {
+  background-color: rgba(28, 28, 34, 0.92); /* light: rgba(250, 250, 252, 0.94) */
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.80);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.30); /* light: 0 2px 6px rgba(0, 0, 0, 0.16) */
+}
+.kelp-shot .screenshot-ui-close-button:hover {
+  background-color: rgba(48, 48, 56, 0.96); /* light: rgba(238, 238, 242, 0.96) */
+  color: #ffffff;
+}
+.kelp-shot .screenshot-ui-close-button:active {
+  background-color: rgba(62, 62, 72, 0.96); /* light: rgba(226, 226, 232, 0.96) */
+}
+.kelp-shot .screenshot-ui-close-button StIcon {
+  icon-size: 16px;
+}
+.kelp-shot .screenshot-ui-tooltip {
+  background-color: rgba(20, 20, 26, 0.94); /* light: rgba(250, 250, 252, 0.96) */
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 9px;
+  padding: 5px 10px;
+  color: #f4f4f6;
+  font-size: 12px;
+}
+/* The selected area has the frame of lib/shot.js, and a corner is taken
+   by a dot on it. The shell's handle keeps its 24px, which is where a
+   corner can be taken. */
+.kelp-shot .screenshot-ui-area-selector .screenshot-ui-area-indicator-selection {
+  border: 0 transparent;
+}
+.kelp-shot .screenshot-ui-area-selector-handle {
+  background-color: transparent;
+  box-shadow: none;
+}
+.kelp-shot-handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #ffffff; /* light: keep */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
+}
+/* A screen that is chosen is the one that is not darkened. */
+.kelp-shot .screenshot-ui-screen-selector:checked {
+  border: 0 transparent;
+}
+
 /* ---------- notification banners ---------- */
 
 /* Same radius as .notification-banner in the shell theme. lib/tweaks.js sets

@@ -31,6 +31,7 @@ import {LockHold} from './lib/lockhold.js';
 import {LidLock} from './lib/lidlock.js';
 import {Outputs} from './lib/outputs.js';
 import {Privacy} from './lib/privacy.js';
+import {Shot} from './lib/shot.js';
 import {X11Size} from './lib/x11size.js';
 
 const ANY = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW;
@@ -236,6 +237,8 @@ export default class Kelpshell extends Extension {
         // the sidebar, which has a card for it.
         this.privacy = new Privacy(this.config);
         this.privacy.enable();
+        this.shot = new Shot(this.config, this.backdrop, this.privacy);
+        this.shot.enable();
 
         this.sidebar = new Sidebar(this);
         this.sidebar.launcher = this.launcher;
@@ -342,6 +345,7 @@ export default class Kelpshell extends Extension {
             // goes before the tweaks that show the bar again.
             () => this.keys?.disable(),
             () => this.sidebar?.disable(),
+            () => this.shot?.disable(),
             () => this.privacy?.disable(),
             () => this.cheatsheet?.disable(),
             () => this.switcher?.disable(),
@@ -376,7 +380,7 @@ export default class Kelpshell extends Extension {
         this.keys = this.sidebar = this.launcher = this.tiling = this.switcher = null;
         this.cheatsheet = this.decorations = this.clipboard = null;
         this.tweaks = this.backdrop = this.lockPicture = this.animator = this.config = null;
-        this.dialogs = this.scroll = this.privacy = null;
+        this.dialogs = this.scroll = this.privacy = this.shot = null;
     }
 
     _reportConfigError() {
@@ -397,6 +401,7 @@ export default class Kelpshell extends Extension {
         this.sidebar.reposition(true);
         this.tiling.ring.restyle();
         this.privacy.sync();
+        this.shot.sync();
         this.decorations.apply();
         this._syncFrames();
     }
