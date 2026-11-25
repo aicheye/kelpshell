@@ -42,7 +42,9 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 
 A monitor that is recorded or shared has a glow along its edges, red for a recording and purple for sharing, and a window has an outline. Around a recorded or shared area the screen is darkened, as the shell does it. None of it is in the recording.
 
-The shell's panel for screenshots and recordings has the look of the cards, and the selected area has a thin line and an angle at each corner. When a recording starts, the panel fades out on the screen and not in the recording.
+The shell's panel for screenshots and recordings has the look of the cards. The selected area is shown as a focused window is, with round corners and the ring. In the list of windows, each window comes from its place on the screen and goes back there, and the ones that are not chosen are dimmed. When a recording starts, the panel fades out on the screen and not in the recording.
+
+A window can be recorded, which the shell leaves out. The recording is of the window itself, also while another window covers it or the strip scrolls it away.
 
 The calendar and quick settings open next to their cards.
 
@@ -180,6 +182,7 @@ GNOME uses some of these combinations itself (`Super+S`, `Super+Space`, `Super+1
 - GNOME Shell 51 in a Wayland session
 - Python 3
 - Optional, for the native modules: `gcc` and the GLib headers (Fedora: `sudo dnf install gcc glib2-devel`)
+- Optional, for recording a window: `gst-launch-1.0` with the PipeWire source (Fedora: `gstreamer1`, `pipewire-gstreamer`), and `openh264enc` or `vp8enc`
 
 ### Install
 

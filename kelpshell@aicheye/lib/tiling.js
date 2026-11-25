@@ -765,11 +765,13 @@ class Tile {
     /**
      * The current tile is drawn at the size of its place. Every other tile
      * is drawn smaller by windows.unfocusedScale, around its middle, so it
-     * keeps its place and the windows next to it do not move.
+     * keeps its place and the windows next to it do not move. A window
+     * that is kept at full size (setFullSize) is drawn as the current one.
      */
     setCurrent(current, animate) {
         const scale = clamp(Number(this.wm.config.values.windows.unfocusedScale) || 1, 0.5, 1);
-        const target = current ? 0 : (1 - scale) * 1000;
+        const full = current || this.wm.fullSize.has(this.win);
+        const target = full ? 0 : (1 - scale) * 1000;
         if (this.shrink.target === target)
             return;
         if (!this.placed || !animate || !this.wm.animator.enabled) {
@@ -3598,6 +3600,8 @@ export class Tiling {
         // The tile drawn at full size: the one that last had focus. It stays
         // while focus is on the launcher or on a floating window.
         this.currentTile = null;
+        // Windows that are drawn at full size without the focus too.
+        this.fullSize = new Set();
         this.ring = new FocusRing(this);
         this.dropHint = new DropHint();
         // this.glass: the Glass of lib/glass.js, set by extension.js before
@@ -4512,6 +4516,20 @@ export class Tiling {
             return;
         }
         this.focusMonitor(monitor);
+    }
+
+    /**
+     * Keep a window at full size while it has no focus (on), or let it be
+     * drawn smaller again. A recording of a window shows the window as it
+     * is drawn, so a recorded window is kept.
+     */
+    setFullSize(win, on) {
+        if (on)
+            this.fullSize.add(win);
+        else
+            this.fullSize.delete(win);
+        const tile = this.tiles.get(win);
+        tile?.setCurrent(tile === this.currentTile, true);
     }
 
     /**
