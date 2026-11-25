@@ -2593,6 +2593,24 @@ class SystemCard {
         this._physical = new Map();   // interface name -> has a device behind it
         this._disks = new Map();      // block device name -> is a whole physical disk
         this._ticks = 0;
+        this._timerId = 0;
+    }
+
+    /**
+     * The meters are read while the card is in use (sidebar.system) and
+     * not at all while it is not. A rate is the difference of two
+     * readings, so the readings from before a pause are dropped.
+     */
+    setPolling(polling) {
+        if (polling === !!this._timerId)
+            return;
+        if (!polling) {
+            GLib.source_remove(this._timerId);
+            this._timerId = 0;
+            return;
+        }
+        this._lastCpu = this._lastNet = this._lastIo = null;
+        this._ticks = 0;
         this._io.set(0, formatRate(0));
         this._net.set(0, formatRate(0));
         this._tick();
@@ -4305,6 +4323,7 @@ export class Sidebar {
         const c = this.config.values.sidebar;
         const system = this._system.actor;
         const slot = this._systemSlot;
+        this._system.setPolling(!!c.system);
         const gap = c.gap * scaleFactor();
         slot.gap = gap;
         const need = this._downloads.spreadRoom();

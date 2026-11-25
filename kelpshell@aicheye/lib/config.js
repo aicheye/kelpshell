@@ -15,7 +15,7 @@ export const DEFAULTS = {
         collapsed: false,
         previewDelay: 350,    // ms hover before a window thumbnail shows
         notifications: 3,     // rows shown in the notification card
-        system: true,         // processor, memory, disk and network meters
+        system: false,        // processor, memory, disk and network meters
         downloads: true,      // the pile of the newest files in the downloads folder
         downloadsDir: '',     // empty: XDG_DOWNLOAD_DIR
         // Icons that fill the status row up to four places, in this order:

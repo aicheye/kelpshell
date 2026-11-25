@@ -12,7 +12,7 @@
     "collapsed": false,      // start collapsed
     "previewDelay": 350,     // ms of hover before a window thumbnail shows
     "notifications": 3,      // rows shown in the notification card
-    "system": true,          // processor, memory, disk and network meters
+    "system": false,         // processor, memory, disk and network meters
     "downloads": true,       // the pile of the newest files in the downloads folder
     "downloadsDir": "",      // the folder it shows. Empty: XDG_DOWNLOAD_DIR
     "statusFill": ["powerMode", "bluetooth"]  // icons that fill the status row up to four

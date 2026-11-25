@@ -10,7 +10,7 @@ A GNOME Shell extension that replaces the top bar with a sidebar and arranges wi
 
 Kelpshell changes how the GNOME desktop is laid out and keeps GNOME's apps, settings and session. It provides:
 
-- **Sidebar**: clock, workspaces, media, notifications, downloads, system meters, privacy and status, as cards on the left edge
+- **Sidebar**: clock, workspaces, media, notifications, downloads, privacy and status, as cards on the left edge
 - **Scrolling window manager**: every window is a column, new windows open beside the focused one, and the view scrolls to it
 - **Launcher**: apps, windows, files, settings, arithmetic and commands from one search field
 - **Clipboard history and emoji picker**: opened at the text cursor
@@ -32,7 +32,7 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 - **Media**: cover, title and controls of the player that is playing.
 - **Notifications**: the latest notifications. Click to open one, middle-click to dismiss it.
 - **Downloads**: the newest files of the downloads folder as a pile.
-- **System**: processor, memory, disk space, disk activity and network.
+- **System**: processor, memory, disk space, disk activity and network. Off by default, `sidebar.system` turns it on.
 - **Privacy**: there while the screen is recorded or shared, or an app uses the microphone or a camera. A click stops the recording, stops the sharing, or mutes the microphone, and the pointer is a hand over those three. Under the pointer the microphone chip shows what a click makes of it.
 - **Status**: network, Bluetooth, battery and volume. A click opens quick settings, a secondary click on the volume icon lists the output devices.
 
@@ -98,7 +98,7 @@ Tap `Super`, or press `Super+Space`.
 
 ### Downloads
 
-The newest files of the downloads folder lie in a pile above the system card. Under the pointer the pile spreads out. Click a file to open it, right-click to show it in the file manager, or drag it out and drop it on a window. A click on the folder opens a grid of the newest files.
+The newest files of the downloads folder lie in a pile in the lower part of the sidebar. Under the pointer the pile spreads out. Click a file to open it, right-click to show it in the file manager, or drag it out and drop it on a window. A click on the folder opens a grid of the newest files.
 
 <p>
   <img src="docs/screenshots/downloads.png" width="38%" alt="The downloads pile spread out, with the name of the file under the pointer">
