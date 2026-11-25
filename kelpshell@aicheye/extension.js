@@ -242,6 +242,7 @@ export default class Kelpshell extends Extension {
 
         this.sidebar = new Sidebar(this);
         this.sidebar.launcher = this.launcher;
+        this.shot.sidebar = this.sidebar;
         this.sidebar.enable(kept?.sidebar);
         // The sidebar has its own strut now.
         kept?.hold.releaseStrut();

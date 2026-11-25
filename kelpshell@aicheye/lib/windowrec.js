@@ -8,16 +8,21 @@
 // Mutter makes a screen cast of the window (RecordWindow), and
 // gst-launch-1.0 writes it to a file, as a process of its own: the shell
 // has its recorder in a process of its own for the same reason, a fault in
-// an encoder does not end the session. The pipeline is the shell's software
-// one, H.264 in MP4 with openh264enc where that is installed and VP8 in
-// WebM otherwise.
+// an encoder does not end the session. The file is H.264 in MP4, from
+// x264enc where that is installed and from openh264enc otherwise, or VP8 in
+// WebM with neither. The last two are the shell's own software pipelines,
+// but for the slices: the shell has openh264enc cut each frame into one
+// slice for each processor, and the first block of every slice comes out a
+// little off, which on a page of one dark colour is a column of squares
+// along the left edge. With one slice there is none, and one thread
+// encodes a window of 2880 x 1920 px more than a hundred times a second.
 //
-// Mutter's cast of a window is as large as the monitor, with the window's
-// buffer in its upper left corner, and says in the metadata of each frame
-// where the window is. The encoders do not read that, so the part of the
-// window that is drawn is cut out by videocrop, with the numbers of the
-// moment the recording starts. A window that is resized afterwards is
-// recorded in the same rectangle.
+// Mutter's cast of a window is as large as the monitor. The part of the
+// window that is drawn is in its upper left corner for as long as the
+// recording runs (lib/castplace.js), wherever the window is drawn on the
+// screen, and videocrop cuts it out with the size of the moment the
+// recording starts. A window that is resized afterwards is recorded in the
+// same rectangle.
 
 import Gettext from 'gettext';
 import Gio from 'gi://Gio';
@@ -26,6 +31,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {holdInPlace} from './castplace.js';
 import {visibleRect} from './crop.js';
 
 const BUS = 'org.gnome.Mutter.ScreenCast';
@@ -34,13 +40,20 @@ const FRAMERATE = 30;
 // process is ended.
 const FINISH_MS = 5000;
 
+const MP4 = [
+    'queue', '!', 'h264parse', '!',
+    'mp4mux', 'fragment-duration=500', 'fragment-mode=first-moov-then-finalise',
+];
+const X264 = {
+    extension: 'mp4',
+    encode: ['x264enc', 'pass=quant', 'quantizer=21', 'speed-preset=veryfast', '!', ...MP4],
+};
 const H264 = {
     extension: 'mp4',
     encode: [
         'openh264enc', 'deblocking=off', 'background-detection=false', 'complexity=low',
-        'adaptive-quantization=false', 'qp-max=26', 'qp-min=26', 'slice-mode=auto', '!',
-        'queue', '!', 'h264parse', '!',
-        'mp4mux', 'fragment-duration=500', 'fragment-mode=first-moov-then-finalise',
+        'adaptive-quantization=false', 'qp-max=26', 'qp-min=26',
+        'slice-mode=n-slices', 'num-slices=1', '!', ...MP4,
     ],
 };
 const VP8 = {
@@ -82,11 +95,12 @@ function runs(argv) {
 export class WindowRecorder {
     constructor(config) {
         this._config = config;
-        this._format = null;     // H264 or VP8, once the programs are found
+        this._format = null;     // X264, H264 or VP8, once the programs are found
         this._session = null;    // the path of the screen cast session
         this._process = null;
         this._path = null;
         this._ended = null;      // called when a recording ends by itself
+        this._release = null;    // ends the hold on the window's place
     }
 
     /** Look for the programs. Until they are found, available is false. */
@@ -97,7 +111,10 @@ export class WindowRecorder {
         const has = name => runs(['gst-inspect-1.0', '--exists', name]);
         if (!await has('pipewiresrc') || !await has('videocrop'))
             return;
-        if (await has('openh264enc') && await has('mp4mux'))
+        const mp4 = await has('mp4mux') && await has('h264parse');
+        if (mp4 && await has('x264enc'))
+            this._format = X264;
+        else if (mp4 && await has('openh264enc'))
             this._format = H264;
         else if (await has('vp8enc') && await has('webmmux'))
             this._format = VP8;
@@ -125,11 +142,13 @@ export class WindowRecorder {
             new GLib.Variant('(a{sv})', [{}]))).deepUnpack();
         this._session = session;
         this._ended = ended;
+        this._release = holdInPlace(this._config, win, drawCursor);
         try {
+            // Without a pointer: the hold draws it.
             const [stream] = (await call(session, `${BUS}.Session`, 'RecordWindow',
                 new GLib.Variant('(a{sv})', [{
                     'window-id': new GLib.Variant('t', win.get_id()),
-                    'cursor-mode': new GLib.Variant('u', drawCursor ? 1 : 0),
+                    'cursor-mode': new GLib.Variant('u', 0),
                     'is-recording': new GLib.Variant('b', true),
                 }]))).deepUnpack();
             const node = new Promise(resolve => {
@@ -181,9 +200,10 @@ export class WindowRecorder {
 
     /**
      * What videocrop takes off the cast, in px of the cast: the cast has
-     * the size of the window's monitor and the window's buffer at 0, 0.
-     * The part that is left is the part of the window that is drawn
-     * (lib/crop.js), with an even width and height, which H.264 needs.
+     * the size of the window's monitor, and the part of the window that is
+     * drawn (lib/crop.js) at 0, 0. That part is left, with an even width
+     * and height, which H.264 needs: an odd one has one more row or column,
+     * which is empty.
      */
     _crop(win) {
         const monitor = Main.layoutManager.monitors[win.get_monitor()];
@@ -193,17 +213,11 @@ export class WindowRecorder {
         const physical = St.ThemeContext.get_for_stage(global.stage).scale_factor > 1;
         const scale = physical ? 1 : Math.ceil(global.display.get_monitor_scale(monitor.index));
         const shown = visibleRect(this._config, win);
-        const buffer = win.get_buffer_rect();
-        const even = v => Math.max(2, Math.floor(v / 2) * 2);
-        const left = Math.max(0, shown.x - buffer.x) * scale;
-        const top = Math.max(0, shown.y - buffer.y) * scale;
-        const width = even(Math.min(shown.width * scale, monitor.width * scale - left));
-        const height = even(Math.min(shown.height * scale, monitor.height * scale - top));
-        return {
-            left, top,
-            right: monitor.width * scale - left - width,
-            bottom: monitor.height * scale - top - height,
-        };
+        const [castWidth, castHeight] = [monitor.width * scale, monitor.height * scale];
+        const even = (v, most) => Math.max(2, Math.min(Math.ceil(v / 2) * 2, Math.floor(most / 2) * 2));
+        const width = even(shown.width * scale, castWidth);
+        const height = even(shown.height * scale, castHeight);
+        return {left: 0, top: 0, right: castWidth - width, bottom: castHeight - height};
     }
 
     /** The file of a recording, named as the shell names its own. */
@@ -270,6 +284,8 @@ export class WindowRecorder {
         if (this._session)
             call(this._session, `${BUS}.Session`, 'Stop').catch(() => {});
         this._session = null;
+        this._release?.();
+        this._release = null;
         this._process = null;
         this._whenExited = null;
         this._ended = null;

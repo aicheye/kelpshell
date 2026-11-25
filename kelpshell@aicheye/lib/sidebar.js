@@ -1037,6 +1037,8 @@ class Minimap {
 
         this._preview = new Preview(sidebar);
         this._tiling.onChanged(() => this.queueRebuild());
+        // A window that is recorded or shared has a dot on its icon.
+        sidebar.privacy?.onChanged(() => this.queueRebuild());
         this._settleId = 0;
         this._tiling.onBetween(() => this._syncBetween());
         Main.layoutManager.connectObject('monitors-changed', () => this.queueRebuild(), this);
@@ -1132,7 +1134,8 @@ class Minimap {
         }
 
         const attention = w => w.urgent || w.demands_attention;
-        const ids = wins => wins.map(w => [w.get_id(), attention(w)]);
+        const cast = w => this._sidebar.privacy?.castOf(w) ?? null;
+        const ids = wins => wins.map(w => [w.get_id(), attention(w), cast(w)]);
         const signature = JSON.stringify([
             model.map(ids), active, focus?.get_id() ?? 0,
             others.map(o => [o.monitor, ids(o.wins)]),
@@ -1706,6 +1709,28 @@ class Minimap {
             child: icon,
             can_focus: true,
         });
+        // A window that is recorded or shared has a dot in the corner of
+        // its icon, in the colour of the outline on the window itself.
+        const cast = this._sidebar.privacy?.castOf(win);
+        if (cast) {
+            const box = new St.Widget({
+                layout_manager: new Clutter.BinLayout(),
+                x_expand: true,
+                y_expand: true,
+            });
+            cell.child = null;
+            icon.set({x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+            box.add_child(icon);
+            box.add_child(new St.Widget({
+                style_class: `kelp-win-cast kelp-win-cast-${cast}`,
+                x_align: Clutter.ActorAlign.END,
+                y_align: Clutter.ActorAlign.START,
+                x_expand: true,
+                y_expand: true,
+            }));
+            cell.child = box;
+            cell.accessible_name = cast === 'record' ? 'Recorded window' : 'Shared window';
+        }
         // For _morphRow(): the icon, and the size its picture has.
         cell._icon = icon;
         cell._iconPx = s;
@@ -1751,6 +1776,32 @@ class Minimap {
             }
         });
         return cell;
+    }
+
+    /**
+     * The window whose icon is at a stage point, with the icon: {win,
+     * cell}, or null.
+     */
+    windowAt(x, y) {
+        const find = actor => {
+            for (const child of actor.get_children()) {
+                if (!child.mapped)
+                    continue;
+                const win = child._delegate?.metaWindow;
+                if (!win) {
+                    const found = find(child);
+                    if (found)
+                        return found;
+                    continue;
+                }
+                const [cx, cy] = child.get_transformed_position();
+                const [cw, ch] = child.get_transformed_size();
+                if (x >= cx && x < cx + cw && y >= cy && y < cy + ch)
+                    return {win, cell: child};
+            }
+            return null;
+        };
+        return find(this.actor) ?? find(this.monitors);
     }
 
     /** The workspace or monitor row under a stage point, and that point in the row. */
@@ -4162,6 +4213,35 @@ export class Sidebar {
         const [x, y] = this._strut.get_position();
         const [width, height] = this._strut.get_size();
         return {x, y, width, height};
+    }
+
+    /**
+     * What of the sidebar is at a stage point, for the window picker of
+     * lib/shot.js: null where no card is, {win, cell} on the icon of a
+     * window in the minimap, and {} on the rest of a card.
+     */
+    pick(x, y) {
+        const on = actor => {
+            if (!actor.mapped)
+                return false;
+            const [ax, ay] = actor.get_transformed_position();
+            const [aw, ah] = actor.get_transformed_size();
+            return x >= ax && x < ax + aw && y >= ay && y < ay + ah;
+        };
+        // No cards: the sidebar is disabled.
+        if (this._cards.length === 0)
+            return null;
+        const cards = [...this._cards.map(card => card.actor), ...this._minimap.monitors.get_children()];
+        if (!cards.some(on))
+            return null;
+        return this._minimap.windowAt(x, y) ?? {};
+    }
+
+    /** The cards with the icons of the windows, which the picker leaves clear. */
+    get windowCards() {
+        if (this._cards.length === 0)
+            return [];
+        return [this._minimap.actor, ...this._minimap.monitors.get_children()];
     }
 
     /** Whether a stage point is over the sidebar's column of cards. */

@@ -25,6 +25,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as WorkspaceAnimation from 'resource:///org/gnome/shell/ui/workspaceAnimation.js';
 
+import {CAST_PLACE} from './castplace.js';
 import {Spring, rubberBand} from './spring.js';
 import {Corners, surfaceOf} from './corners.js';
 import {EdgeFade} from './edgefade.js';
@@ -190,8 +191,20 @@ const CLIP_EFFECT = 'kelp-clip';
 const PassEffect = GObject.registerClass(
 class KelpPassEffect extends Clutter.Effect {});
 
-/** top: the y the clip starts at, negative for a title bar above the buffer. */
+/**
+ * top: the y the clip starts at, negative for a title bar above the buffer.
+ * A window that is recorded has the clip in its effect, which leaves the
+ * recording whole (lib/castplace.js).
+ */
 function setClip(actor, clip, top, height) {
+    const held = actor.get_effect(CAST_PLACE);
+    if (held) {
+        held.clip = clip ? [clip[0], top, clip[1], height - top] : null;
+        if (actor.has_clip)
+            actor.remove_clip();
+        actor.queue_redraw();
+        return;
+    }
     if (clip) {
         actor.set_clip(clip[0], top, clip[1], height - top);
         if (!actor.get_effect(CLIP_EFFECT))
@@ -202,6 +215,9 @@ function setClip(actor, clip, top, height) {
 }
 
 function clearClip(actor) {
+    const held = actor.get_effect(CAST_PLACE);
+    if (held)
+        held.clip = null;
     actor.remove_clip();
     if (actor.get_effect(CLIP_EFFECT))
         actor.remove_effect_by_name(CLIP_EFFECT);
@@ -3602,6 +3618,7 @@ export class Tiling {
         this.currentTile = null;
         // Windows that are drawn at full size without the focus too.
         this.fullSize = new Set();
+        this._middleId = 0;      // see focusInMiddle
         this.ring = new FocusRing(this);
         this.dropHint = new DropHint();
         // this.glass: the Glass of lib/glass.js, set by extension.js before
@@ -3750,6 +3767,9 @@ export class Tiling {
                     win.unmake_above();
             }
         }
+        if (this._middleId)
+            global.display.disconnect(this._middleId);
+        this._middleId = 0;
         this.ring.destroy();
         this.dropHint.destroy();
         this.fade.disable();
@@ -4531,7 +4551,41 @@ export class Tiling {
             this.fullSize.delete(win);
         const tile = this.tiles.get(win);
         tile?.setCurrent(tile === this.currentTile, true);
+        // The clip of the tile's actor is with the recording while it runs.
+        tile?.sync();
         this.ring.sync();
+    }
+
+    /**
+     * Give a window the focus, and slide its column to the middle of the
+     * view as center-column does. The column is placed once the focus is on
+     * it: the view follows a focus that goes to another column. A window on
+     * no strip has the focus and stays where it is.
+     */
+    focusInMiddle(win) {
+        const middle = () => {
+            const tile = this.tiles.get(win);
+            if (!tile?.strip)
+                return;
+            tile.strip.place(tile.column, 'middle');
+            tile.strip.layout(true);
+            this._changed();
+        };
+        if (this._middleId)
+            global.display.disconnect(this._middleId);
+        this._middleId = 0;
+        if (global.display.focus_window === win) {
+            middle();
+            return;
+        }
+        // After the handler of this class, which was connected first.
+        this._middleId = global.display.connect('notify::focus-window', () => {
+            global.display.disconnect(this._middleId);
+            this._middleId = 0;
+            if (global.display.focus_window === win)
+                middle();
+        });
+        win.activate(global.get_current_time());
     }
 
     /**

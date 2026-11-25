@@ -183,20 +183,58 @@ function monitorMark(monitor, tone) {
     return actor;
 }
 
+// The whole stage but one place, darkened: four rectangles around the
+// place. With a radius the place has round corners, as a window has: the
+// corners are darkened outside the curve (cornerPicture).
+const Surround = GObject.registerClass(
+class KelpSurround extends Clutter.Actor {
+    _init() {
+        super._init();
+        this._sides = [0, 1, 2, 3].map(() => new Clutter.Actor({background_color: SHADE}));
+        this._corners = [[false, false], [true, false], [false, true], [true, true]].map(
+            ([flipX, flipY]) => piece(null, 0, 0, 0, 0, flipX, flipY));
+        for (const child of [...this._sides, ...this._corners])
+            this.add_child(child);
+        this._key = '';
+        Shell.util_set_hidden_from_pick(this, true);
+    }
+
+    /** The place: x, y, width, height on the stage, and its corner radius. */
+    setPlace(rect, radius = 0) {
+        const key = `${rect.x},${rect.y},${rect.width},${rect.height},${radius}`;
+        if (key === this._key)
+            return;
+        this._key = key;
+        const [width, height] = global.stage.get_size();
+        const [x1, y1] = [Math.max(0, rect.x), Math.max(0, rect.y)];
+        const x2 = Math.max(x1, Math.min(width, rect.x + rect.width));
+        const y2 = Math.max(y1, Math.min(height, rect.y + rect.height));
+        const set = (actor, x, y, w, h) => {
+            actor.set_position(x, y);
+            actor.set_size(Math.max(0, w), Math.max(0, h));
+        };
+        set(this._sides[0], 0, 0, width, y1);
+        set(this._sides[1], 0, y2, width, height - y2);
+        set(this._sides[2], 0, y1, x1, y2 - y1);
+        set(this._sides[3], x2, y1, width - x2, y2 - y1);
+        const r = Math.max(0, Math.min(radius, Math.floor((x2 - x1) / 2), Math.floor((y2 - y1) / 2)));
+        if (r !== this._radius) {
+            this._radius = r;
+            const content = r > 0 ? cornerPicture(r, SHADE.alpha / 255) : null;
+            for (const corner of this._corners)
+                corner.content = content;
+        }
+        set(this._corners[0], x1, y1, r, r);
+        set(this._corners[1], x2 - r, y1, r, r);
+        set(this._corners[2], x1, y2 - r, r, r);
+        set(this._corners[3], x2 - r, y2 - r, r, r);
+    }
+});
+
 /** The whole stage but an area (x, y, width, height), darkened. */
 function areaMark(rect) {
-    const [width, height] = global.stage.get_size();
-    const actor = new Clutter.Actor();
-    const [x1, y1] = [Math.max(0, rect.x), Math.max(0, rect.y)];
-    const [x2, y2] = [Math.min(width, rect.x + rect.width), Math.min(height, rect.y + rect.height)];
-    for (const [x, y, w, h] of [
-        [0, 0, width, y1], [0, y2, width, height - y2],
-        [0, y1, x1, y2 - y1], [x2, y1, width - x2, y2 - y1],
-    ]) {
-        if (w > 0 && h > 0)
-            actor.add_child(new Clutter.Actor({x, y, width: w, height: h, background_color: SHADE}));
-    }
-    Shell.util_set_hidden_from_pick(actor, true);
+    const actor = new Surround();
+    actor.setPlace(rect);
     return actor;
 }
 
@@ -281,6 +319,9 @@ export class Privacy {
         this._painted = 0;       // children of the root, fading ones included
         this._held = false;      // the compositor is kept from unredirecting
         this._pending = null;    // the area of a recording that starts (handOff)
+        this._shades = new Set(); // the darkening around each recorded window
+        this._castWindows = new Map();   // window id -> 'record' or 'cast'
+        this._followId = 0;
         this._checking = false;
         global.display.connectObject('window-created', () => this._syncMarks(), this);
         Main.layoutManager.connectObject('monitors-changed', () => this._syncMarks(true), this);
@@ -315,6 +356,8 @@ export class Privacy {
         }
         this._marks.clear();
         this._marks = null;
+        for (const shade of [...this._shades])
+            shade.destroy();
         this._native?.emit('set-root', null);
         this._native?.disconnectObject(this);
         this._native = null;
@@ -482,6 +525,36 @@ export class Privacy {
         Promise.all(asked).then(() => (this._checking = false));
     }
 
+    /**
+     * How a window is shown to others now: 'record' while it is recorded,
+     * 'cast' while an app shares it, null otherwise. The sidebar marks the
+     * window's icon with it.
+     */
+    castOf(win) {
+        return this._castWindows?.get(win.get_id()) ?? null;
+    }
+
+    /** The windows that have a cast, from the streams as they are now. */
+    _syncCastWindows() {
+        const now = new Map();
+        for (const s of this._streams()) {
+            if (s.kind !== 'window')
+                continue;
+            const tone = s.recording ? 'record' : 'cast';
+            // As in _wanted(): a stream whose end was missed counts for
+            // nothing.
+            if (tone === 'record' ? !this.recording : this.sharing === 0)
+                continue;
+            if (now.get(s.window) !== 'record')
+                now.set(s.window, tone);
+        }
+        const same = now.size === this._castWindows.size &&
+            [...now].every(([id, tone]) => this._castWindows.get(id) === tone);
+        this._castWindows = now;
+        if (!same)
+            this._changed();
+    }
+
     /** What is to be marked: key -> {kind, tone, monitor, rect, win}. */
     _wanted() {
         const wanted = new Map();
@@ -535,13 +608,15 @@ export class Privacy {
     _syncMarks(rebuild = false) {
         if (!this._marks)
             return;
+        this._syncCastWindows();
         if (this._shade)
             this._shade.opacity = this._marksOn ? 0 : 255;
         const wanted = this._wanted();
         for (const [key, mark] of this._marks) {
-            // The darkening is the same for a recording and for sharing.
+            // The darkening around an area is the same for a recording and
+            // for sharing.
             if (!rebuild && wanted.has(key) &&
-                (!mark.painted || wanted.get(key).tone === mark.tone))
+                (wanted.get(key).tone === mark.tone || (!mark.painted && !mark.win)))
                 continue;
             this._marks.delete(key);
             mark.win?.disconnectObject(this);
@@ -549,14 +624,21 @@ export class Privacy {
                 fadeOut(mark.actor, () => this._rootLeft());
             else
                 fadeOut(mark.actor);
+            if (mark.shade) {
+                mark.shade.kelpLeaving = true;
+                fadeOut(mark.shade);
+            }
         }
         for (const [key, want] of wanted) {
             if (this._marks.has(key))
                 continue;
             let actor = null;
             const painted = this._native && want.kind === 'monitor';
+            let shade = null;
             if (want.kind === 'window') {
                 actor = this._windowMark(want.win, want.tone);
+                if (want.tone === 'record')
+                    shade = this._windowShade(actor);
             } else if (painted) {
                 actor = monitorMark(want.monitor, want.tone);
                 this._ensureRoot().add_child(actor);
@@ -572,7 +654,8 @@ export class Privacy {
             if (!actor)
                 continue;
             fadeIn(actor);
-            this._marks.set(key, {actor, tone: want.tone, win: want.win ?? null, painted});
+            this._marks.set(key,
+                {actor, shade, tone: want.tone, win: want.win ?? null, painted});
         }
         // A window that is shown alone on its monitor is otherwise shown
         // without the compositor, and nothing is painted over it.
@@ -652,6 +735,8 @@ export class Privacy {
             const radius = full || !this._config.values.windows.clipCorners
                 ? 0 : this._config.values.focusRing.radius;
             actor.style = `border-width: ${OUTLINE}px; border-radius: ${radius}px;`;
+            actor.kelpRadius = radius *
+                St.ThemeContext.get_for_stage(global.stage).scale_factor;
             actor.set_position(rect.x - buffer.x, rect.y - buffer.y);
             actor.set_size(rect.width, rect.height);
         };
@@ -667,5 +752,64 @@ export class Privacy {
         win.get_compositor_private().add_child(actor);
         Shell.util_set_hidden_from_pick(actor, true);
         return actor;
+    }
+
+    /**
+     * Everything but a recorded window is darkened, as around a recorded
+     * area. The window moves: the darkening is placed before every frame
+     * from where the window's outline is drawn, and is gone while the
+     * window is not on the screen.
+     */
+    _windowShade(outline) {
+        const shade = new Surround();
+        shade.kelpOutline = outline;
+        shade.kelpShown = false;
+        shade.opacity = 0;
+        global.stage.add_child(shade);
+        if (this._root)
+            global.stage.set_child_above_sibling(this._root, null);
+        this._shades.add(shade);
+        shade.connect('destroy', () => {
+            this._shades.delete(shade);
+            this._followShades();
+        });
+        this._followShades();
+        this._placeShades();
+        return shade;
+    }
+
+    _followShades() {
+        const on = this._shades.size > 0;
+        if (on && !this._followId) {
+            this._followId = global.stage.connect('before-update', () => this._placeShades());
+        } else if (!on && this._followId) {
+            global.stage.disconnect(this._followId);
+            this._followId = 0;
+        }
+    }
+
+    _placeShades() {
+        for (const shade of this._shades) {
+            const outline = shade.kelpOutline;
+            const shown = !outline.kelpGone && outline.mapped && !shade.kelpLeaving;
+            if (shown) {
+                const [x, y] = outline.get_transformed_position();
+                const [width, height] = outline.get_transformed_size();
+                if (Number.isFinite(x + y + width + height)) {
+                    shade.setPlace({
+                        x: Math.round(x), y: Math.round(y),
+                        width: Math.round(width), height: Math.round(height),
+                    }, outline.kelpRadius ?? 0);
+                }
+            }
+            if (shown !== shade.kelpShown && !shade.kelpLeaving) {
+                shade.kelpShown = shown;
+                shade.ease({
+                    opacity: shown ? 255 : 0,
+                    duration: MARK_MS,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                });
+            }
+        }
     }
 }

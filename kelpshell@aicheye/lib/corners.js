@@ -158,11 +158,22 @@ export const HAVE_SNIPPETS = typeof Cogl.Snippet?.new === 'function' &&
 // pipelines that hold the same snippet object.
 let snippet = null;
 
-// More than 0 while a Thumbnail paints. A thumbnail shows the window by
-// itself, so the window is drawn without the shade in it. The other clones
-// of a window, those of lib/glass.js, show it where it is: a window with a
-// thumbnail is darkened in them as every other window is.
-let thumbnailPaints = 0;
+// More than 0 while a window is painted by itself: a Thumbnail, or the
+// picture of a window for a recording of it (paintAlone). The window is
+// drawn without the shade in it then. The other clones of a window, those
+// of lib/glass.js, show it where it is: a window with a thumbnail is
+// darkened in them as every other window is.
+let alonePaints = 0;
+
+/** Run a paint of a window that shows the window by itself. */
+export function paintAlone(paint) {
+    alonePaints++;
+    try {
+        paint();
+    } finally {
+        alonePaints--;
+    }
+}
 
 // Clutter samples the offscreen buffer with the nearest texel, which is
 // exact at full size. A Clutter.Clone that draws the surface at a third of
@@ -186,12 +197,7 @@ const TRILINEAR = [Cogl.PipelineFilter.LINEAR_MIPMAP_LINEAR, Cogl.PipelineFilter
 export const Thumbnail = GObject.registerClass(
 class KelpThumbnail extends Clutter.Clone {
     vfunc_paint(paintContext) {
-        thumbnailPaints++;
-        try {
-            super.vfunc_paint(paintContext);
-        } finally {
-            thumbnailPaints--;
-        }
+        paintAlone(() => super.vfunc_paint(paintContext));
     }
 });
 
@@ -303,8 +309,8 @@ class KelpCornerEffect extends Clutter.OffscreenEffect {
         let range = [0, 1, 0, 0];
         let ramp = 0;
         let color = [0, 0, 0, 0];
-        // Not in a thumbnail, which shows the window by itself.
-        if (shade && g && thumbnailPaints === 0) {
+        // Not in a paint that shows the window by itself.
+        if (shade && g && alonePaints === 0) {
             const [ax, ay] = actor.get_transformed_position();
             const [aw, ah] = actor.get_transformed_size();
             const kx = aw > 0 ? actor.width / aw : 1;

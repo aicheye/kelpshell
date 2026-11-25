@@ -40,11 +40,11 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 
 ![The sidebar collapsed to icons, with two windows stacked in the first column](docs/screenshots/collapsed.png)
 
-A monitor that is recorded or shared has a glow along its edges, red for a recording and purple for sharing, and a window has an outline. Around a recorded or shared area the screen is darkened, as the shell does it. None of it is in the recording.
+A monitor that is recorded or shared has a glow along its edges, red for a recording and purple for sharing, and a window has an outline. Around a recorded or shared area, and around a recorded window, the screen is darkened, as the shell does it around an area. None of it is in the recording.
 
-The shell's panel for screenshots and recordings has the look of the cards. The selected area has the ring of the focused window around it. A window is chosen where it is on the screen: the chosen one is clear with the ring and everything else is darkened, as around an area. When a recording starts, the panel fades out on the screen and not in the recording.
+The shell's panel for screenshots and recordings has the look of the cards. The selected area has the ring of the focused window around it. A window is chosen where it is on the screen, with a click on it or on its icon in the sidebar: the chosen one is clear with the ring and everything else is darkened, as around an area. It takes the focus and slides to the middle of the view, for a screenshot and for a recording. When a recording starts, the panel fades out on the screen and not in the recording.
 
-A window can be recorded, which the shell leaves out. The recording is of the window itself, also while another window covers it or the strip scrolls it away. A recorded window is drawn as the focused one for as long, with a red outline in place of the ring.
+A window can be recorded, which the shell leaves out. The recording is of the window itself, also while another window covers it or the strip scrolls it away. A recorded window is drawn as the focused one for as long, with a red outline in place of the ring, and everything around it is darkened. Its icon in the sidebar has a red dot, and the icon of a window that an app shares a purple one.
 
 The calendar and quick settings open next to their cards.
 
