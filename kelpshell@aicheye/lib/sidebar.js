@@ -2701,6 +2701,9 @@ class SystemCard {
 // ---------------------------------------------------------------- privacy
 
 const CHIP_MS = 200;
+// The icon of the microphone chip changes over this long, as the colours
+// of a chip do (stylesheet).
+const CHIP_HOVER_MS = 120;
 
 // A chip of the privacy card: icons and labels in a row, with a click or
 // without. A chip that stops what it stands for ends in a stop button, a
@@ -2733,8 +2736,12 @@ function chip(styleClass, children, onClick, stops = false) {
         clip_to_allocation: true,
         visible: false,
     });
-    if (onClick)
+    if (onClick) {
         button.connect('clicked', onClick);
+        // The pointing hand over a chip that a click acts on, the arrow
+        // over one that only shows something.
+        button.set_cursor_type(Clutter.CursorType.POINTER);
+    }
     return button;
 }
 
@@ -2976,10 +2983,27 @@ class PrivacyCard {
         this._cast = chip('kelp-chip-cast', [icon('screen-shared-symbolic')],
             () => this._privacy.stopSharing(), true);
         this._cast.accessible_name = 'Stop sharing the screen';
-        this._micIcon = icon('audio-input-microphone-symbolic');
-        this._mic = chip('kelp-chip-mic', [this._micIcon],
-            () => this._privacy.toggleMicrophone());
-        this._mic.accessible_name = 'Mute the microphone';
+        // The microphone chip shows what the microphone is, and under the
+        // pointer what a click makes of it: the crossed microphone over one
+        // that listens, the plain one over a muted one. After a click it
+        // shows the new state until the pointer has left.
+        this._micOn = icon('audio-input-microphone-symbolic');
+        this._micOff = icon('microphone-disabled-symbolic');
+        this._micOff.opacity = 0;
+        const mic = new St.Widget({
+            layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER,
+        });
+        mic.add_child(this._micOn);
+        mic.add_child(this._micOff);
+        this._mic = chip('kelp-chip-mic', [mic], () => {
+            this._micClicked = this._mic.hover;
+            this._privacy.toggleMicrophone();
+        });
+        this._mic.connect('notify::hover', () => {
+            if (!this._mic.hover)
+                this._micClicked = false;
+            this._syncMic(true);
+        });
         this._camera = chip('kelp-chip-camera', [icon('camera-web-symbolic')], null);
         this._camera.accessible_name = 'Camera in use';
 
@@ -3019,8 +3043,8 @@ class PrivacyCard {
         const [h, m] = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60];
         if (p.recording)
             this._time.text = `${h > 0 ? `${h}:${pad(m)}` : m}:${pad(seconds % 60)}`;
-        this._micIcon.icon_name = p.microphone === 'muted'
-            ? 'microphone-disabled-symbolic' : 'audio-input-microphone-symbolic';
+        if (p.microphone)
+            this._syncMic(animate);
         if (p.microphone === 'muted')
             this._mic.add_style_class_name('muted');
         else if (p.microphone)
@@ -3037,6 +3061,19 @@ class PrivacyCard {
         this._chips.setShown(shown, animate);
         this._shown = true;
         this.slot.setShown(true);
+    }
+
+    _syncMic(animate) {
+        const muted = this._privacy.microphone === 'muted';
+        const crossed = muted !== (this._mic.hover && !this._micClicked);
+        const ease = (actor, shown) => actor.ease({
+            opacity: shown ? 255 : 0,
+            duration: animate ? CHIP_HOVER_MS : 0,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
+        ease(this._micOn, !crossed);
+        ease(this._micOff, crossed);
+        this._mic.accessible_name = muted ? 'Unmute the microphone' : 'Mute the microphone';
     }
 
     setCollapsed(collapsed) {

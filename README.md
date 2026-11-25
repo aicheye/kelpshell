@@ -33,7 +33,7 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 - **Notifications**: the latest notifications. Click to open one, middle-click to dismiss it.
 - **Downloads**: the newest files of the downloads folder as a pile.
 - **System**: processor, memory, disk space, disk activity and network.
-- **Privacy**: there while the screen is recorded or shared, or an app uses the microphone or a camera. A click stops the recording, stops the sharing, or mutes the microphone.
+- **Privacy**: there while the screen is recorded or shared, or an app uses the microphone or a camera. A click stops the recording, stops the sharing, or mutes the microphone, and the pointer is a hand over those three. Under the pointer the microphone chip shows what a click makes of it.
 - **Status**: network, Bluetooth, battery and volume. A click opens quick settings, a secondary click on the volume icon lists the output devices.
 
 `Super+B` collapses the sidebar to a strip of icons, and the windows move over with it. It hides while a window is fullscreen.
