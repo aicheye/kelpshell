@@ -158,10 +158,12 @@ export const HAVE_SNIPPETS = typeof Cogl.Snippet?.new === 'function' &&
 // pipelines that hold the same snippet object.
 let snippet = null;
 
-// Surface actors that a thumbnail is showing, each with the number of
-// thumbnails. A thumbnail shows the window by itself, so a surface in this
-// map is drawn without the shade in a clone.
-//
+// More than 0 while a Thumbnail paints. A thumbnail shows the window by
+// itself, so the window is drawn without the shade in it. The other clones
+// of a window, those of lib/glass.js, show it where it is: a window with a
+// thumbnail is darkened in them as every other window is.
+let thumbnailPaints = 0;
+
 // Clutter samples the offscreen buffer with the nearest texel, which is
 // exact at full size. A Clutter.Clone that draws the surface at a third of
 // its size then keeps one texel in nine, and text breaks up. So every clone
@@ -174,26 +176,24 @@ let snippet = null;
 // each pixel the window moves: under the sidebar a pixel of blurred text
 // then changes by 1.7 to 3 levels of 255 for each pixel of travel, and one
 // of 1 px stripes by 30 to 70 (measured).
-const thumbnails = new Map();
 
 // Minification and magnification filters for the offscreen buffer.
 const NEAREST = [Cogl.PipelineFilter.NEAREST, Cogl.PipelineFilter.NEAREST];
 const LINEAR = [Cogl.PipelineFilter.LINEAR, Cogl.PipelineFilter.LINEAR];
 const TRILINEAR = [Cogl.PipelineFilter.LINEAR_MIPMAP_LINEAR, Cogl.PipelineFilter.LINEAR];
 
-/**
- * A thumbnail of this surface actor is being shown (on) or has gone (off).
- * Calls are counted, so each on needs one off.
- */
-export function setThumbnail(surface, on) {
-    if (!surface)
-        return;
-    const count = (thumbnails.get(surface) ?? 0) + (on ? 1 : -1);
-    if (count > 0)
-        thumbnails.set(surface, count);
-    else
-        thumbnails.delete(surface);
-}
+/** A clone that shows a window by itself, as a picture of it. */
+export const Thumbnail = GObject.registerClass(
+class KelpThumbnail extends Clutter.Clone {
+    vfunc_paint(paintContext) {
+        thumbnailPaints++;
+        try {
+            super.vfunc_paint(paintContext);
+        } finally {
+            thumbnailPaints--;
+        }
+    }
+});
 
 export const CornerEffect = GObject.registerClass(
 class KelpCornerEffect extends Clutter.OffscreenEffect {
@@ -240,7 +240,7 @@ class KelpCornerEffect extends Clutter.OffscreenEffect {
             pipeline.add_snippet(this._snippet());
         }
         // Clutter samples the buffer with the nearest texel, which is exact
-        // at full size. A clone gets mipmaps (see thumbnails above). A
+        // at full size. A clone gets mipmaps (see above). A
         // window actor that is scaled, by tiling.js for a window without
         // focus or by the shell while a window opens, gets linear filtering:
         // nearest would drop one row of pixels in fifty at a scale of 0.98.
@@ -304,7 +304,7 @@ class KelpCornerEffect extends Clutter.OffscreenEffect {
         let ramp = 0;
         let color = [0, 0, 0, 0];
         // Not in a thumbnail, which shows the window by itself.
-        if (shade && g && !(thumbnails.has(actor) && actor.is_in_clone_paint())) {
+        if (shade && g && thumbnailPaints === 0) {
             const [ax, ay] = actor.get_transformed_position();
             const [aw, ah] = actor.get_transformed_size();
             const kx = aw > 0 ? actor.width / aw : 1;

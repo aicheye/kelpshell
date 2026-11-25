@@ -24,7 +24,7 @@ import * as Mpris from 'resource:///org/gnome/shell/ui/mpris.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
-import {setThumbnail} from './corners.js';
+import {Thumbnail} from './corners.js';
 import {contentRect} from './crop.js';
 import {DownloadsCard} from './downloads.js';
 import {EDGE} from './edgefade.js';
@@ -926,10 +926,8 @@ class Preview {
         const buffer = win.get_buffer_rect();
         const k = Math.min(PREVIEW_WIDTH * s / frame.width, PREVIEW_HEIGHT * s / frame.height, 1);
         this._clear();
-        this._source = source;
-        setThumbnail(source, true);
         this._thumb.set_size(Math.round(frame.width * k), Math.round(frame.height * k));
-        this._thumb.add_child(new Clutter.Clone({
+        this._thumb.add_child(new Thumbnail({
             source,
             x: Math.round((buffer.x - frame.x) * k),
             y: Math.round((buffer.y - frame.y) * k),
@@ -975,8 +973,6 @@ class Preview {
 
     _clear() {
         this._thumb.destroy_all_children();
-        setThumbnail(this._source, false);
-        this._source = null;
     }
 
     destroy() {

@@ -25,7 +25,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as SwitcherPopup from 'resource:///org/gnome/shell/ui/switcherPopup.js';
 
 import {ShadowBin} from './backdrop.js';
-import {setThumbnail} from './corners.js';
+import {Thumbnail} from './corners.js';
 import {easeSettled} from './settle.js';
 import {steadyLine} from './text.js';
 import {isHelper} from './tiling.js';
@@ -121,15 +121,13 @@ const SwitcherList = GObject.registerClass({
         // clipped to the view, and a column out of view is clipped to nothing.
         const source = win.get_compositor_private()?.get_first_child();
         if (source) {
-            const clone = new Clutter.Clone({
+            const clone = new Thumbnail({
                 source,
                 x: Math.round((buffer.x - frame.x) * k),
                 y: Math.round((buffer.y - frame.y) * k),
                 width: Math.round(buffer.width * k),
                 height: Math.round(buffer.height * k),
             });
-            setThumbnail(source, true);
-            clone.connect('destroy', () => setThumbnail(source, false));
             thumb.add_child(clone);
         }
 
