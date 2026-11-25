@@ -1037,7 +1037,7 @@ class Minimap {
 
         this._preview = new Preview(sidebar);
         this._tiling.onChanged(() => this.queueRebuild());
-        // A window that is recorded or shared has a dot on its icon.
+        // A window that is recorded or shared has a fill behind its icon.
         sidebar.privacy?.onChanged(() => this.queueRebuild());
         this._settleId = 0;
         this._tiling.onBetween(() => this._syncBetween());
@@ -1709,26 +1709,11 @@ class Minimap {
             child: icon,
             can_focus: true,
         });
-        // A window that is recorded or shared has a dot in the corner of
-        // its icon, in the colour of the outline on the window itself.
+        // A window that is recorded or shared has a fill behind its icon,
+        // in the colour of the outline on the window itself.
         const cast = this._sidebar.privacy?.castOf(win);
         if (cast) {
-            const box = new St.Widget({
-                layout_manager: new Clutter.BinLayout(),
-                x_expand: true,
-                y_expand: true,
-            });
-            cell.child = null;
-            icon.set({x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-            box.add_child(icon);
-            box.add_child(new St.Widget({
-                style_class: `kelp-win-cast kelp-win-cast-${cast}`,
-                x_align: Clutter.ActorAlign.END,
-                y_align: Clutter.ActorAlign.START,
-                x_expand: true,
-                y_expand: true,
-            }));
-            cell.child = box;
+            cell.add_style_class_name(`kelp-win-${cast}`);
             cell.accessible_name = cast === 'record' ? 'Recorded window' : 'Shared window';
         }
         // For _morphRow(): the icon, and the size its picture has.
@@ -4260,6 +4245,12 @@ export class Sidebar {
         if (this._cards.length === 0)
             return [];
         return [this._minimap.actor, ...this._minimap.monitors.get_children()];
+    }
+
+    /** The other cards, which the picker darkens with what is around the window. */
+    get otherCards() {
+        const windows = this.windowCards;
+        return this._cards.map(card => card.actor).filter(actor => !windows.includes(actor));
     }
 
     /** Whether a stage point is over the sidebar's column of cards. */

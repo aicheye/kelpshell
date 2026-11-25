@@ -44,7 +44,7 @@ A monitor that is recorded or shared has a glow along its edges, red for a recor
 
 The shell's panel for screenshots and recordings has the look of the cards. The selected area has the ring of the focused window around it. A window is chosen where it is on the screen, with a click on it or on its icon in the sidebar: the chosen one is clear with the ring and everything else is darkened, as around an area. It takes the focus and slides to the middle of the view, for a screenshot and for a recording. When a recording starts, the panel fades out on the screen and not in the recording.
 
-A window can be recorded, which the shell leaves out. The recording is of the window itself, also while another window covers it or the strip scrolls it away. A recorded window is drawn as the focused one for as long, with a red outline in place of the ring, and everything around it is darkened. Its icon in the sidebar has a red dot, and the icon of a window that an app shares a purple one.
+A window can be recorded, which the shell leaves out. The recording is of the window itself, also while another window covers it or the strip scrolls it away. A recorded window is drawn as the focused one for as long, with a red outline in place of the ring, and everything around it is darkened. Its icon in the sidebar has a red fill behind it, and the icon of a window that an app shares a purple one.
 
 The calendar and quick settings open next to their cards.
 

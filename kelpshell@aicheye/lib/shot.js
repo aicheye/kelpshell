@@ -21,6 +21,7 @@
 //   view, so a window that is out of the view can be chosen as well: by
 //   its icon in the sidebar, whose cards with the windows stay clear, or
 //   with the keys. The screenshot of a window is taken when it is saved.
+//   The cards of the sidebar lie over the rings, as over the windows.
 // - A window can be recorded (lib/windowrec.js), which the shell leaves
 //   out: its window button is off while the panel is set to record.
 //
@@ -613,11 +614,14 @@ export class Shot {
     }
 
     /**
-     * The cards of the sidebar with the icons of the windows, as pictures
-     * over the darkening: a window is chosen there too.
+     * The cards of the sidebar, as pictures over the darkening and the
+     * rings: a window runs under the cards, and so does its ring. The
+     * cards with the icons of the windows are clear, a window is chosen
+     * there too. The others are as dark as what is around the window.
      */
     _placeCards() {
-        const sources = this.sidebar?.windowCards ?? [];
+        const clear = this.sidebar?.windowCards ?? [];
+        const sources = [...clear, ...this.sidebar?.otherCards ?? []];
         for (const [source, card] of this._cards) {
             if (!sources.includes(source)) {
                 this._cards.delete(source);
@@ -628,6 +632,12 @@ export class Shot {
             let card = this._cards.get(source);
             if (!card) {
                 card = new Clutter.Clone({source});
+                // A picture of the card with every colour at 1 - SELECT_SHADE
+                // of its strength is the card under a darkening of
+                // SELECT_SHADE, and is cut to the card's own outline.
+                card._shade = new Clutter.BrightnessContrastEffect();
+                card._shade.set_brightness(-SELECT_SHADE);
+                card.add_effect(card._shade);
                 this._cards.set(source, card);
                 this._picker.add_child(card);
                 source.connectObject('destroy', () => {
@@ -635,6 +645,7 @@ export class Shot {
                         card.destroy();
                 }, card);
             }
+            card._shade.enabled = !clear.includes(source);
             card.visible = source.mapped;
             if (!card.visible)
                 continue;

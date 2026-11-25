@@ -28,7 +28,10 @@ const BANNER_INSET = 12;
 
 // Touchpad units of a three-finger swipe that slide the workspaces by one.
 // The shell's own length is 300 (TOUCHPAD_BASE_HEIGHT in swipeTracker.js).
-const WORKSPACE_SWIPE_UNITS = 360;
+const WORKSPACE_SWIPE_UNITS = 440;
+// A progress of the workspaces' slide this near a workspace is at it
+// (EPSILON in swipeTracker.js).
+const WORKSPACE_AT = 0.005;
 
 const BANNER_ALIGN = {
     left: Clutter.ActorAlign.START,
@@ -403,6 +406,13 @@ export class Tweaks {
      * The tracker's time for the rest of the way after the fingers lift is
      * in proportion to that length.
      *
+     * A swipe moves the workspaces by one at most. In the shell that holds
+     * for a swipe that begins with the workspaces at rest: one that begins
+     * while they still slide after the swipe before may end a workspace
+     * further, so a second short movement of the fingers passes over a
+     * workspace. Here the tracker is given only the two workspaces the
+     * slide is between as the places such a swipe can end at.
+     *
      * how is 'vertical', 'detached', or 'stock' for the shell's own
      * connection.
      */
@@ -414,6 +424,7 @@ export class Tweaks {
         this._workspaceGesture = how;
         global.stage.disconnectObject(gesture);
         delete gesture.emit;
+        delete tracker.confirmSwipe;
         if (how === 'detached')
             return;
         const handle = gesture._handleEvent.bind(gesture);
@@ -429,6 +440,15 @@ export class Tweaks {
             if (name === 'update' || name === 'end')
                 args[args.length - 1] = WORKSPACE_SWIPE_UNITS;
             return emit.call(gesture, name, ...args);
+        };
+        const confirm = tracker.confirmSwipe;
+        tracker.confirmSwipe = (distance, points, progress, cancelProgress) => {
+            const below = points.filter(point => point <= progress).at(-1);
+            const above = points.find(point => point >= progress);
+            if (below !== undefined && above !== undefined &&
+                progress - below > WORKSPACE_AT && above - progress > WORKSPACE_AT)
+                points = [below, above];
+            return confirm.call(tracker, distance, points, progress, cancelProgress);
         };
         tracker.orientation = Clutter.Orientation.VERTICAL;
     }

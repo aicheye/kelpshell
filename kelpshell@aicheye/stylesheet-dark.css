@@ -305,19 +305,21 @@
 .kelp-win.urgent {
   box-shadow: inset 0 0 0 1px -st-accent-color;
 }
-/* A window that is recorded or shared: a dot in the corner of its icon, in
-   the colour of the outline on the window. */
-.kelp-win-cast {
-  width: 7px;
-  height: 7px;
-  border-radius: 4px;
-  margin: 1px;
+/* A window that is recorded or shared: the fill behind its icon, as the
+   focused window has one, in the colour of the outline on the window. The
+   selectors with :checked come after those above that clear the background
+   of the focused icon, whose fill is an actor that moves. */
+.kelp-win.kelp-win-record,
+.kelp-ws-list .kelp-win.kelp-win-record:checked,
+.kelp-ws-list .kelp-win.kelp-win-record:checked:hover,
+.kelp-ws-list .kelp-win.kelp-win-record:checked:focus {
+  background-color: rgba(224, 27, 36, 0.34);
 }
-.kelp-win-cast-record {
-  background-color: #e01b24;
-}
-.kelp-win-cast-cast {
-  background-color: #c061cb; /* light: #9141ac */
+.kelp-win.kelp-win-cast,
+.kelp-ws-list .kelp-win.kelp-win-cast:checked,
+.kelp-ws-list .kelp-win.kelp-win-cast:checked:hover,
+.kelp-ws-list .kelp-win.kelp-win-cast:checked:focus {
+  background-color: rgba(192, 97, 203, 0.34); /* light: rgba(145, 65, 172, 0.30) */
 }
 .kelp-win-add {
   color: rgba(255, 255, 255, 0.40);
