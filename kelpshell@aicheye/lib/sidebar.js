@@ -2834,8 +2834,11 @@ class ControlsCard {
         this._search = iconButton('system-search-symbolic', '', () => sidebar.launcher?.toggle());
         this._collapse = iconButton('sidebar-show-symbolic', '', () => sidebar.toggleCollapsed());
         this._buttons = new St.BoxLayout({style_class: 'kelp-control-buttons', x_expand: true});
-        this._buttons.add_child(this._search);
+        // The collapse button is at the bottom left of the card: first in
+        // the row here, last in the column of the collapsed sidebar, see
+        // setCollapsed().
         this._buttons.add_child(this._collapse);
+        this._buttons.add_child(this._search);
 
         const surface = new St.BoxLayout({
             style_class: 'kelp-card kelp-controls',
@@ -3033,6 +3036,7 @@ class ControlsCard {
     setCollapsed(collapsed) {
         const orientation = collapsed ? VERTICAL : HORIZONTAL;
         this._buttons.orientation = orientation;
+        this._buttons.set_child_at_index(this._collapse, collapsed ? 1 : 0);
         this._statusBox.orientation = orientation;
         this._batteryBox.orientation = orientation;
         if (this._indicators)
