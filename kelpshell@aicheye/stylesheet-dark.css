@@ -1498,22 +1498,18 @@
   color: #f4f4f6;
   font-size: 12px;
 }
-/* The selected area has the frame of lib/shot.js, and a corner is taken
-   by a dot on it. The shell's handle keeps its 24px, which is where a
-   corner can be taken. */
+/* The selected area: a 1px line on its edge, and an angle around each
+   corner (lib/shot.js) in place of the shell's disc. The shell's handle
+   keeps its 24px, which is where a corner can be taken. */
 .kelp-shot .screenshot-ui-area-selector .screenshot-ui-area-indicator-selection {
-  border: 0 transparent;
+  border: 1px solid rgba(255, 255, 255, 0.85); /* light: keep */
 }
 .kelp-shot .screenshot-ui-area-selector-handle {
   background-color: transparent;
   box-shadow: none;
 }
-.kelp-shot-handle {
-  width: 10px;
-  height: 10px;
-  border-radius: 5px;
+.kelp-shot-angle {
   background-color: #ffffff; /* light: keep */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
 }
 /* A screen that is chosen is the one that is not darkened. */
 .kelp-shot .screenshot-ui-screen-selector:checked {

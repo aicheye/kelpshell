@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The shell's panel for screenshots and screen recordings, with the look of
-// the rest: the panel has the card material, and the selected area has the
-// frame that an area has while it is recorded (frameSpec in lib/privacy.js),
-// in the colour of the ring around the focused window. The rules are in the
-// stylesheet, under .kelp-shot.
+// the rest: the panel has the card material, and the selected area has a
+// 1px line on its edge and an angle around each corner, where the shell has
+// a 2px line and a 24px disc. The rules are in the stylesheet, under
+// .kelp-shot.
 //
 // The shell closes the panel in one frame when a recording starts, so that
 // the recording does not show it going. Here the screen is painted into a
 // picture before that, and lib/privacy.js fades the picture out where the
-// recording does not see it, while the frame of what is recorded comes in
-// the place of the frame of the selection.
+// recording does not see it, while its darkening around the area comes.
 
 import Clutter from 'gi://Clutter';
-import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
@@ -22,13 +20,19 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {Frame, frameSpec} from './privacy.js';
-
-const HANDLES = ['_topLeftHandle', '_topRightHandle', '_bottomLeftHandle', '_bottomRightHandle'];
+// The shell's handles on the corners of the selected area, each with the
+// side of the corner its angle is on: -1 left or top, 1 right or bottom.
+const HANDLES = [
+    ['_topLeftHandle', -1, -1], ['_topRightHandle', 1, -1],
+    ['_bottomLeftHandle', -1, 1], ['_bottomRightHandle', 1, 1],
+];
+// An angle is two bars ANGLE_WIDTH px wide and ANGLE_LENGTH px long, outside
+// the area, with their inner edges on its edge.
+const ANGLE_WIDTH = 3;
+const ANGLE_LENGTH = 14;
 
 export class Shot {
-    constructor(config, backdrop, privacy) {
-        this._config = config;
+    constructor(backdrop, privacy) {
         this._backdrop = backdrop;
         this._privacy = privacy;
         this._ui = null;
@@ -37,8 +41,7 @@ export class Shot {
 
     enable() {
         const ui = Main.screenshotUI;
-        const selection = ui?._areaSelector?._areaIndicator?._selectionRect;
-        if (!ui?._panel || !ui._primaryMonitorBin || !selection)
+        if (!ui?._panel || !ui._primaryMonitorBin || !ui._areaSelector)
             return;
         this._ui = ui;
         ui.add_style_class_name('kelp-shot');
@@ -56,19 +59,31 @@ export class Shot {
             GObject.BindingFlags.SYNC_CREATE);
         this._backdrop.attach(ui._panel);
 
-        this._selection = selection;
-        this._dots = HANDLES.map(name => {
+        // The handle is a square with the corner of the area in its middle,
+        // and stays as large as the shell has it: that is where a corner
+        // can be taken.
+        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const [t, l] = [ANGLE_WIDTH * scale, ANGLE_LENGTH * scale];
+        this._angles = HANDLES.map(([name, sideX, sideY]) => {
             const handle = ui._areaSelector[name];
-            const dot = new St.Widget({
-                style_class: 'kelp-shot-handle',
-                x_expand: true, y_expand: true,
-                x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER,
-            });
-            handle.layout_manager = new Clutter.BinLayout();
-            handle.add_child(dot);
-            return dot;
+            const angle = new Clutter.Actor();
+            const place = () => {
+                const [cx, cy] = [handle.width / 2, handle.height / 2];
+                const x = sideX < 0 ? cx - t : cx + t - l;
+                const y = sideY < 0 ? cy - t : cy + t - l;
+                const [across, down] = angle.get_children();
+                across.set_position(x, sideY < 0 ? cy - t : cy);
+                across.set_size(l, t);
+                down.set_position(sideX < 0 ? cx - t : cx, y);
+                down.set_size(t, l);
+            };
+            angle.add_child(new St.Widget({style_class: 'kelp-shot-angle'}));
+            angle.add_child(new St.Widget({style_class: 'kelp-shot-angle'}));
+            handle.add_child(angle);
+            handle.connectObject('notify::size', place, this);
+            place();
+            return angle;
         });
-        this.sync();
 
         // An own property over the method of the class, taken away again
         // in disable().
@@ -100,22 +115,6 @@ export class Shot {
         });
     }
 
-    /** The frame of the selection, from the config as it is now. */
-    sync() {
-        if (!this._ui)
-            return;
-        this._frame?.destroy();
-        const {width, radius, reach} = frameSpec(this._config);
-        const [ok, color] = Cogl.Color.from_string(this._config.values.focusRing.color);
-        this._frame = new Frame(
-            ok ? color : new Cogl.Color({red: 255, green: 255, blue: 255, alpha: 140}),
-            width, radius, {x: -reach, y: -reach});
-        this._frame.add_constraint(new Clutter.BindConstraint({
-            source: this._selection, coordinate: Clutter.BindCoordinate.SIZE, offset: 2 * reach,
-        }));
-        this._selection.add_child(this._frame);
-    }
-
     disable() {
         const ui = this._ui;
         if (!ui)
@@ -123,12 +122,10 @@ export class Shot {
         this._ui = null;
         if (ui._startScreencast === this._start)
             delete ui._startScreencast;
-        this._frame?.destroy();
-        this._frame = null;
-        for (const dot of this._dots)
-            dot.destroy();
-        for (const name of HANDLES)
-            ui._areaSelector[name].layout_manager = null;
+        for (const angle of this._angles)
+            angle.destroy();
+        for (const [name] of HANDLES)
+            ui._areaSelector[name].disconnectObject(this);
         this._backdrop.detach(ui._panel);
         ui._panel.disconnectObject(this);
         if (this._laterId)

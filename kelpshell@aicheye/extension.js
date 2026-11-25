@@ -237,7 +237,7 @@ export default class Kelpshell extends Extension {
         // the sidebar, which has a card for it.
         this.privacy = new Privacy(this.config);
         this.privacy.enable();
-        this.shot = new Shot(this.config, this.backdrop, this.privacy);
+        this.shot = new Shot(this.backdrop, this.privacy);
         this.shot.enable();
 
         this.sidebar = new Sidebar(this);
@@ -401,7 +401,6 @@ export default class Kelpshell extends Extension {
         this.sidebar.reposition(true);
         this.tiling.ring.restyle();
         this.privacy.sync();
-        this.shot.sync();
         this.decorations.apply();
         this._syncFrames();
     }

@@ -40,9 +40,9 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 
 ![The sidebar collapsed to icons, with two windows stacked in the first column](docs/screenshots/collapsed.png)
 
-A monitor that is recorded or shared has a glow along its edges, an area has a frame around it and a window an outline: red for a recording, purple for sharing. They are on the screen and not in the recording.
+A monitor that is recorded or shared has a glow along its edges, red for a recording and purple for sharing, and a window has an outline. Around a recorded or shared area the screen is darkened, as the shell does it. None of it is in the recording.
 
-The shell's panel for screenshots and recordings has the look of the cards, and the selected area has the frame it keeps while it is recorded. When a recording starts, the panel fades out on the screen and not in the recording.
+The shell's panel for screenshots and recordings has the look of the cards, and the selected area has a thin line and an angle at each corner. When a recording starts, the panel fades out on the screen and not in the recording.
 
 The calendar and quick settings open next to their cards.
 
@@ -199,7 +199,7 @@ The script links the extension into `~/.local/share/gnome-shell/extensions`, so 
 
 ### Native modules
 
-Five small C modules add what a shell extension cannot do in JavaScript: a title bar for apps that would otherwise draw a fallback frame (Spotify and other Chromium apps), dragging a file from the downloads pile into a window, even touchpad scrolling, the right size for X11 windows (a fullscreen VLC, for example) after a monitor with another scale is connected or removed, and the glow and the frame on what is recorded or shared. `install.sh` builds them when `gcc` is installed. Everything else works without them.
+Five small C modules add what a shell extension cannot do in JavaScript: a title bar for apps that would otherwise draw a fallback frame (Spotify and other Chromium apps), dragging a file from the downloads pile into a window, even touchpad scrolling, the right size for X11 windows (a fullscreen VLC, for example) after a monitor with another scale is connected or removed, and the glow on a monitor that is recorded or shared. `install.sh` builds them when `gcc` is installed. Everything else works without them.
 
 They are built for the installed GNOME Shell version. Run `./install.sh` again after an upgrade of GNOME.
 

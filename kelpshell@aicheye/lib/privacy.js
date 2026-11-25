@@ -16,13 +16,17 @@
 // microphone.
 //
 // While the screen is recorded or shared, what is shown to others is marked
-// on the screen itself: a glow along the edges of a monitor, a frame around
-// an area, an outline on a window. Red is a recording, purple is sharing.
-// The marks are for the person at the screen and are not in the recording:
+// on the screen itself: a glow along the edges of a monitor, an outline on a
+// window, and everything around an area is darkened. Red is a recording,
+// purple is sharing. The marks are for the person at the screen and are not
+// in the recording:
 //
-// - The glow and the frame are painted by the native module after Mutter has
-//   made the picture for every cast (native/capture.c). Without the module
-//   they are not drawn at all, because a cast of a monitor would show them.
+// - The glow is painted by the native module after Mutter has made the
+//   picture for every cast (native/capture.c). Without the module it is not
+//   drawn at all, because a cast of a monitor would show it.
+// - The darkening is around the area, and a cast of the area shows the
+//   area. It is as the shell's own, which it takes the place of so that it
+//   can come and go over MARK_MS.
 // - The outline of a window is a child of the window's actor, so it is under
 //   whatever covers the window. A cast of that window paints the actor again
 //   into a buffer of its own, and the outline leaves itself out of every
@@ -56,6 +60,9 @@ const TONES = {
 
 // The glow of a monitor reaches GLOW px in from each edge.
 const GLOW = 40;
+// How dark everything around a recorded or shared area is: black at 30%,
+// as the shell has it.
+const SHADE = new Cogl.Color({red: 0, green: 0, blue: 0, alpha: 77});
 // The outline of a window, px.
 const OUTLINE = 3;
 
@@ -113,95 +120,6 @@ function picture(data, w, h) {
     return content;
 }
 
-/**
- * The upper left corner of a frame: a quarter of a ring `width` px wide
- * whose outer radius is `radius` px, in a square of that side. Two samples
- * for each px, and each edge of the ring is one sample wide.
- */
-function arc(color, radius, width) {
-    const key = `arc:${color.red},${color.green},${color.blue},${color.alpha}:${radius}:${width}`;
-    let content = contents.get(key);
-    if (content)
-        return content;
-    const n = radius * 2;
-    const data = new Uint8Array(n * n * 4);
-    const part = v => Math.min(1, Math.max(0, v));
-    for (let y = 0; y < n; y++) {
-        for (let x = 0; x < n; x++) {
-            // From the middle of the ring's circle, in samples.
-            const d = Math.hypot(n - x - 0.5, n - y - 0.5);
-            const a = color.alpha / 255 * part(n - d + 0.5) * part(d - (n - 2 * width) + 0.5);
-            data.set([color.red * a, color.green * a, color.blue * a, 255 * a].map(Math.round),
-                (y * n + x) * 4);
-        }
-    }
-    content = picture(data, n, n);
-    contents.set(key, content);
-    return content;
-}
-
-/**
- * The frame of an area, from the ring around the focused window
- * (focusRing): its width, its radius, and how far its outer edge is from
- * the area, all in px of the stage. The area has square corners and the
- * frame round ones, so the frame is outside the area by so much that the
- * middle of its line goes through the corners of the area: that is
- * (radius - width / 2) * (1 - 1 / sqrt(2)) from the area to the middle of
- * the line.
- */
-export function frameSpec(config) {
-    const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-    const width = Math.max(1, Math.round(config.values.focusRing.width)) * scale;
-    const radius = Math.max(width, Math.round(config.values.focusRing.radius) * scale);
-    const reach = Math.round((radius - width / 2) * (1 - Math.SQRT1_2) + width / 2);
-    return {width, radius, reach};
-}
-
-/**
- * A frame along the edge of its own box, with round corners: four lines
- * and four corners (arc), each an actor of its own, so the native module
- * repaints their places and not the whole box.
- */
-export const Frame = GObject.registerClass(
-class KelpFrame extends Clutter.Actor {
-    _init(color, width, radius, props = {}) {
-        super._init(props);
-        this._color = color;
-        this._width = width;
-        this._radius = radius;
-        this._lines = [0, 1, 2, 3].map(() => new Clutter.Actor({background_color: color}));
-        this._corners = [[false, false], [true, false], [false, true], [true, true]].map(
-            ([flipX, flipY]) => piece(null, 0, 0, 0, 0, flipX, flipY));
-        for (const child of [...this._lines, ...this._corners])
-            this.add_child(child);
-    }
-
-    vfunc_allocate(box) {
-        this.set_allocation(box);
-        const [w, h] = [Math.round(box.get_width()), Math.round(box.get_height())];
-        const t = this._width;
-        // A box that is smaller than two corners has smaller ones.
-        const r = Math.max(t, Math.min(this._radius, Math.floor(w / 2), Math.floor(h / 2)));
-        if (r !== this._r) {
-            this._r = r;
-            const content = arc(this._color, r, t);
-            for (const corner of this._corners)
-                corner.content = content;
-        }
-        const place = (child, x, y, width, height) => child.allocate(new Clutter.ActorBox({
-            x1: x, y1: y, x2: x + Math.max(0, width), y2: y + Math.max(0, height),
-        }));
-        place(this._lines[0], r, 0, w - 2 * r, t);
-        place(this._lines[1], r, h - t, w - 2 * r, t);
-        place(this._lines[2], 0, r, t, h - 2 * r);
-        place(this._lines[3], w - t, r, t, h - 2 * r);
-        place(this._corners[0], 0, 0, r, r);
-        place(this._corners[1], w - r, 0, r, r);
-        place(this._corners[2], 0, h - r, r, r);
-        place(this._corners[3], w - r, h - r, r, r);
-    }
-});
-
 /** An actor that shows a picture at a place, mirrored where asked. */
 function piece(content, x, y, width, height, flipX = false, flipY = false) {
     const actor = new Clutter.Actor({x, y, width, height, content});
@@ -230,20 +148,21 @@ function monitorMark(monitor, tone) {
     return actor;
 }
 
-/**
- * The frame of an area (frameSpec). Nothing of it is on another monitor: a
- * side of the area that is closer to the edge of its monitor than the frame
- * reaches has its line on that edge.
- */
-function areaMark(config, monitor, rect, tone) {
-    const {width, radius, reach} = frameSpec(config);
-    const x1 = Math.max(monitor.x, rect.x - reach);
-    const y1 = Math.max(monitor.y, rect.y - reach);
-    const x2 = Math.min(monitor.x + monitor.width, rect.x + rect.width + reach);
-    const y2 = Math.min(monitor.y + monitor.height, rect.y + rect.height + reach);
-    const [r, g, b] = TONES[tone];
-    const color = new Cogl.Color({red: r, green: g, blue: b, alpha: 255});
-    return new Frame(color, width, radius, {x: x1, y: y1, width: x2 - x1, height: y2 - y1});
+/** The whole stage but an area (x, y, width, height), darkened. */
+function areaMark(rect) {
+    const [width, height] = global.stage.get_size();
+    const actor = new Clutter.Actor();
+    const [x1, y1] = [Math.max(0, rect.x), Math.max(0, rect.y)];
+    const [x2, y2] = [Math.min(width, rect.x + rect.width), Math.min(height, rect.y + rect.height)];
+    for (const [x, y, w, h] of [
+        [0, 0, width, y1], [0, y2, width, height - y2],
+        [0, y1, x1, y2 - y1], [x2, y1, width - x2, y2 - y1],
+    ]) {
+        if (w > 0 && h > 0)
+            actor.add_child(new Clutter.Actor({x, y, width: w, height: h, background_color: SHADE}));
+    }
+    Shell.util_set_hidden_from_pick(actor, true);
+    return actor;
 }
 
 /** Destroy a mark, unless it went with the window it was on. */
@@ -330,11 +249,9 @@ export class Privacy {
         this._checking = false;
         global.display.connectObject('window-created', () => this._syncMarks(), this);
         Main.layoutManager.connectObject('monitors-changed', () => this._syncMarks(true), this);
-        // The shell darkens everything around a recorded area. The line
-        // around the area takes its place.
-        this._shade = this._native ? Main.screenshotUI._screencastAreaIndicator ?? null : null;
-        if (this._shade)
-            this._shade.opacity = 0;
+        // The shell's darkening around a recorded area, which is there
+        // and gone in one frame. areaMark() takes its place.
+        this._shade = Main.screenshotUI._screencastAreaIndicator ?? null;
 
         this._syncRecording();
         this._syncMic();
@@ -387,6 +304,10 @@ export class Privacy {
     /** The configuration has changed. */
     sync() {
         this._syncMarks(true);
+    }
+
+    get _marksOn() {
+        return !!this._config.values.privacy.marks;
     }
 
     // ------------------------------------------------------------ recording
@@ -529,7 +450,7 @@ export class Privacy {
     /** What is to be marked: key -> {kind, tone, monitor, rect, win}. */
     _wanted() {
         const wanted = new Map();
-        if (!this._config.values.privacy.marks)
+        if (!this._marksOn)
             return wanted;
         const monitors = Main.layoutManager.monitors;
         const manager = global.backend.get_monitor_manager();
@@ -579,35 +500,44 @@ export class Privacy {
     _syncMarks(rebuild = false) {
         if (!this._marks)
             return;
+        if (this._shade)
+            this._shade.opacity = this._marksOn ? 0 : 255;
         const wanted = this._wanted();
         for (const [key, mark] of this._marks) {
-            if (!rebuild && wanted.get(key)?.tone === mark.tone)
+            // The darkening is the same for a recording and for sharing.
+            if (!rebuild && wanted.has(key) &&
+                (!mark.painted || wanted.get(key).tone === mark.tone))
                 continue;
             this._marks.delete(key);
             mark.win?.disconnectObject(this);
-            if (mark.win)
-                fadeOut(mark.actor);
-            else
+            if (mark.painted)
                 fadeOut(mark.actor, () => this._rootLeft());
+            else
+                fadeOut(mark.actor);
         }
         for (const [key, want] of wanted) {
             if (this._marks.has(key))
                 continue;
             let actor = null;
-            if (want.kind === 'window')
+            const painted = this._native && want.kind === 'monitor';
+            if (want.kind === 'window') {
                 actor = this._windowMark(want.win, want.tone);
-            else if (this._native && want.kind === 'monitor')
+            } else if (painted) {
                 actor = monitorMark(want.monitor, want.tone);
-            else if (this._native)
-                actor = areaMark(this._config, want.monitor, want.rect, want.tone);
-            if (!actor)
-                continue;
-            if (want.kind !== 'window') {
                 this._ensureRoot().add_child(actor);
                 this._painted++;
+            } else if (want.kind === 'area') {
+                // Over everything the stage has, and under what the native
+                // module paints.
+                actor = areaMark(want.rect);
+                global.stage.add_child(actor);
+                if (this._root)
+                    global.stage.set_child_above_sibling(this._root, null);
             }
+            if (!actor)
+                continue;
             fadeIn(actor);
-            this._marks.set(key, {actor, tone: want.tone, win: want.win ?? null});
+            this._marks.set(key, {actor, tone: want.tone, win: want.win ?? null, painted});
         }
         // A window that is shown alone on its monitor is otherwise shown
         // without the compositor, and nothing is painted over it.
@@ -619,16 +549,15 @@ export class Privacy {
      * the next frame, so that the recording does not show it going. Here
      * the last picture of the screen with the panel (pictures: content, x,
      * y, width, height, one for each monitor) fades out over what is on the
-     * screen now, among the marks, which are not recorded. The mark of what
-     * is recorded (rect: x, y, width, height) is made from now on, before
-     * the cast is there, so it comes as the frame of the selection goes.
+     * screen now, where the native module paints, which is not recorded.
+     * The mark of what is recorded (rect: x, y, width, height) is made
+     * from now on, before the cast is there, so it comes as the panel goes.
      */
     handOff(rect, pictures) {
         if (!this._marks)
             return;
         this._pending = rect;
-        if (!this._native || !this._config.values.privacy.marks ||
-            !St.Settings.get().enable_animations)
+        if (!this._native || !this._marksOn || !St.Settings.get().enable_animations)
             return;
         const group = new Clutter.Actor();
         for (const props of pictures)
