@@ -469,6 +469,14 @@ const EaseList = GObject.registerClass({
 // workspace and the focus change only when the fingers lift or later: a
 // mark that waits for its target would stand still for the whole swipe and
 // move after it.
+//
+// A workspace with no window has no icon for the fill of the focused window.
+// On the way there the fill stays on its icon and fades by the share of the
+// way, and on the way back it comes in again (the weights of hold). After a
+// key, it goes with the icon it was on while it fades (rest in moveTo).
+// Without the two, the fill stood at full opacity for a whole swipe to an
+// empty workspace and went out after the slide, at a place its icon had
+// left by then.
 const Mark = GObject.registerClass({
     Properties: {
         'progress': GObject.ParamSpec.double('progress', 'progress', 'progress',
@@ -479,22 +487,36 @@ const Mark = GObject.registerClass({
         super._init({style_class: styleClass, reactive: false, opacity: 0});
         this.target = null;
         this.key = null;
+        this.last = null;   // the key it had before it lost its target
         this.from = null;   // [x, y, width, height] in the list
         this.box = null;    // where it was put by the last layout
-        this.pair = null;   // [a, b, share]: held between two actors, see hold()
+        this.pair = null;   // [a, b, share, weights]: held between two actors, see hold()
     }
 
-    /** Between two actors of the list, share of the way from a to b, whatever the target is. */
-    hold(a, b, share) {
+    /**
+     * Between two actors of the list, share of the way from a to b, whatever
+     * the target is.
+     *
+     * weights: [at a, at b], 1 where the mark is shown when the swipe rests
+     * there and 0 where it is not. Its opacity is between the two by the
+     * share. With a weight of 0 at one end it does not move: it is on the
+     * actor of the other end, and that end can then have no actor (null).
+     * Without weights the opacity is left as it is.
+     */
+    hold(a, b, share, weights = null) {
         for (const actor of [a, b]) {
-            if (this.pair?.includes(actor))
+            if (!actor || this.pair?.includes(actor))
                 continue;
             actor.connect('destroy', () => {
                 if (this.pair?.includes(actor))
                     this.pair = null;
             });
         }
-        this.pair = [a, b, share];
+        this.pair = [a, b, share, weights];
+        if (weights) {
+            this.remove_transition('opacity');
+            this.opacity = Math.round(255 * (weights[0] * (1 - share) + weights[1] * share));
+        }
         this.get_parent()?.queue_relayout();
     }
 
@@ -515,6 +537,11 @@ const Mark = GObject.registerClass({
 
     /** From where release() left it to its target over ROW_MS, unless it is on its way already. */
     settle() {
+        // A swipe that ended part of the way to a workspace with no window
+        // leaves the mark at the opacity it had there.
+        const opacity = this.key !== null ? 255 : 0;
+        if (this.opacity !== opacity && !this.get_transition('opacity'))
+            this.ease({opacity, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
         if (this.progress >= 1 || this.get_transition('progress'))
             return;
         this.ease_property('progress', 1, {
@@ -535,26 +562,60 @@ const Mark = GObject.registerClass({
         this.get_parent()?.queue_relayout();
     }
 
-    /** actor: the new target, or null for none. animate: false puts it there at once. */
-    moveTo(actor, key, animate) {
+    /**
+     * actor: the new target, or null for none. animate: false puts it there
+     * at once. rest: with no target, the actor the mark fades out on. It
+     * goes there from where it is over ROW_MS, as the rows take their new
+     * heights, and fades for as long. Without one it fades where it is.
+     */
+    moveTo(actor, key, animate, rest = null) {
         const before = this.key;
-        this.target = actor;
+        const last = this.last;
+        const target = actor ?? rest;
+        this.target = target;
         this.key = actor ? key : null;
-        actor?.connect('destroy', () => {
-            if (this.target === actor)
+        if (actor)
+            this.last = null;
+        else if (before !== null)
+            this.last = before;
+        target?.connect('destroy', () => {
+            if (this.target === target)
                 this.target = null;
         });
         this.get_parent()?.queue_relayout();
-        const fade = opacity => {
+        const fade = (opacity, duration = 120) => {
             if (!animate) {
                 this.remove_transition('opacity');
                 this.opacity = opacity;
-            } else if (this.opacity !== opacity) {
-                this.ease({opacity, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            } else if (this.opacity !== opacity || this.get_transition('opacity')) {
+                // Also at that opacity now and on its way to another: a
+                // fade that has just started has not changed it yet.
+                this.ease({opacity, duration, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
             }
         };
+        const slide = () => {
+            this.from = this.box;
+            this.progress = 0;
+            this.ease_property('progress', 1, {
+                duration: ROW_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        };
         if (!actor) {
-            fade(0);
+            // Only when it has just lost its target: a later rebuild finds
+            // it on its way, and leaves it there.
+            const leaves = animate && before !== null && this.box && this.opacity > 0;
+            if (!animate || !rest) {
+                this.remove_transition('progress');
+                this.progress = 1;
+            } else if (leaves) {
+                this.remove_transition('progress');
+                slide();
+            }
+            fade(0, ROW_MS);
+            // The rows have just been built, as in EaseRow.growFrom().
+            if (leaves)
+                holdTransitions(this, rest ? ['progress', 'opacity'] : ['opacity']);
             return;
         }
         if (!animate) {
@@ -562,16 +623,15 @@ const Mark = GObject.registerClass({
             this.progress = 1;
         } else if (this.key !== before) {
             this.remove_transition('progress');
-            // From where it is. With no place before, or one that has
-            // faded out, it is at its target at once and fades in.
-            const slides = before !== null && this.box && this.opacity > 0;
+            // From where it is, also while it fades out on the icon it
+            // has just left: the focus is on no window for a moment in
+            // some changes. With no place before, or one that has faded
+            // out, it is at its target at once and fades in.
+            const slides = (before !== null || last !== null) && this.box && this.opacity > 0;
             this.from = slides ? this.box : null;
             this.progress = slides ? 0 : 1;
             if (slides) {
-                this.ease_property('progress', 1, {
-                    duration: ROW_MS,
-                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
-                });
+                slide();
                 // The rows have just been built, as in EaseRow.growFrom().
                 holdTransitions(this, ['progress']);
             }
@@ -613,11 +673,15 @@ class KelpMarkedList extends St.Viewport {
             const to = mark.target ? this._place(mark.target) : null;
             // With no target it fades out where it is.
             let at = mark.box ?? [0, 0, 0, 0];
-            const a = mark.pair ? this._place(mark.pair[0]) : null;
-            const b = mark.pair ? this._place(mark.pair[1]) : null;
+            // Held by a swipe, see Mark.hold(): an end with a weight of 0
+            // has no place for it.
+            const [pa, pb, share, weights] = mark.pair ?? [];
+            const a = pa && weights?.[0] !== 0 ? this._place(pa) : null;
+            const b = pb && weights?.[1] !== 0 ? this._place(pb) : null;
             if (a && b) {
-                // Held by a swipe, see Mark.hold().
-                at = a.map((v, i) => v + (b[i] - v) * mark.pair[2]);
+                at = a.map((v, i) => v + (b[i] - v) * share);
+            } else if (weights && (a || b)) {
+                at = a ?? b;
             } else if (to) {
                 const t = mark.progress;
                 at = mark.from && t < 1 ? mark.from.map((v, i) => v + (to[i] - v) * t) : to;
@@ -1187,11 +1251,20 @@ class Minimap {
         // The two fills move to the active workspace and to the icon of the
         // focused window.
         const rows = this._rows.get_children();
-        let focused = null;
-        for (const row of rows)
-            focused ??= row._slots?.find(slot => slot.win === focus)?.cell ?? null;
+        const cellOf = id => {
+            let cell = null;
+            for (const row of rows)
+                cell ??= row._slots?.find(slot => slot.win.get_id() === id)?.cell ?? null;
+            return cell;
+        };
+        const focused = focus ? cellOf(focus.get_id()) : null;
         this._marked.rowMark.moveTo(rows[active] ?? null, active, ease);
-        this._marked.cellMark.moveTo(focused, focus?.get_id(), ease);
+        // With no focused window among the icons, on an empty workspace for
+        // one, the fill fades out on the icon it was on.
+        const mark = this._marked.cellMark;
+        const left = mark.key ?? mark.last;
+        mark.moveTo(focused, focus?.get_id(), ease,
+            focused || left === null ? null : cellOf(left));
         // A swipe that holds a fill holds it between the new rows.
         this._syncBetween();
         // The title line closes when the focus leaves the windows of the
@@ -1219,7 +1292,9 @@ class Minimap {
      * Between two workspaces, the two rows are drawn between their forms
      * by the same share (_morphRow), and the fill of the focused window
      * lies between the icon it is on and the icon of the window that has
-     * the focus of the other workspace.
+     * the focus of the other workspace. A workspace with no window has no
+     * such icon: the fill stays on the one it has and fades by the share
+     * of the way there.
      *
      * When it ends, the rows are built for the new workspace or focus at
      * once, where that is queued, and the fills go on from where they are
@@ -1244,9 +1319,13 @@ class Minimap {
             return null;
         };
         let ended = false;
-        const place = (mark, a, b, share) => {
-            if (a && b)
-                mark.hold(a, b, share);
+        // With weights it is held with no actor at either end too, until
+        // the swipe is over. Let go at the end of the slide, a frame before
+        // the workspace changes, it would settle on the window that still
+        // has the focus.
+        const place = (mark, a, b, share, weights = null) => {
+            if (a && b || weights)
+                mark.hold(a, b, share, weights);
             else if (mark.release())
                 ended = true;
         };
@@ -1259,12 +1338,26 @@ class Minimap {
         const focusOf = index => index === active && focus && rows[index]?._slots?.some(slot => slot.win === focus)
             ? focus : this._tiling.focusOf(index);
         let pair = windows;
+        let weights = null;
         if (!pair && workspaces) {
             const [a, b, share] = workspaces;
             pair = [focusOf(a), focusOf(b), share];
+            // Whether the fill is on the icon when the swipe rests at that
+            // workspace. On the active one, if the icon is that of the
+            // focused window. On the other, if the focus goes there with the
+            // workspace: not while a window that is in no row has it, one on
+            // another monitor.
+            const shown = !!focus && cellOf(focus) !== null;
+            weights = [a, b].map((index, i) => {
+                if (!pair[i] || !cellOf(pair[i]))
+                    return 0;
+                if (index === active)
+                    return pair[i] === focus ? 1 : 0;
+                return shown || !focus ? 1 : 0;
+            });
         }
         place(this._marked.cellMark,
-            pair && cellOf(pair[0]), pair && cellOf(pair[1]), pair?.[2]);
+            pair && cellOf(pair[0]), pair && cellOf(pair[1]), pair?.[2], weights);
         if (workspaces && !this._collapsed) {
             const [a, b, share] = workspaces;
             rows.forEach((row, index) => {
