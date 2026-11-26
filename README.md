@@ -58,7 +58,8 @@ Each workspace is a horizontal strip of columns, in the style of [niri](https://
 - The view scrolls the least distance that shows the focused column. A column that scrolls off to the left runs on under the sidebar, blurred.
 - A column holds one window or several stacked vertically.
 - `Super+R` cycles the column width through 1/3, 1/2 and 2/3 of the screen. `Super+F` toggles full width. The width set for an app is remembered.
-- A full-width or fullscreen window fills the view wherever its column is. When its column is moved, the window is nudged that way and settles back. Sent to another workspace, it stays where it is with a nudge up or down while the workspaces change behind it.
+- A full-width or fullscreen window fills the view wherever its column is. When its column is moved, the window is nudged that way and settles back.
+- A window sent to another workspace stays on screen while the workspaces change behind it: it glides to its new place with a nudge up or down.
 - Drag a window onto another to stack them, or between two columns to put it there. A cue shows where it lands.
 - Dialogs, fixed-size windows and windows set always on top float. `Super+T` floats or tiles any window. The focus, move, align and width keys work on a floating window too.
 - Workspaces are stacked vertically and slide with their wallpaper.
