@@ -356,6 +356,10 @@ const FullHeight = GObject.registerClass({
 // grow goes from 0, the height given to growFrom(), to 1, the height of the
 // content. While it is under 1 the content has its own height from the top
 // of the row and is cut at the row's lower edge.
+//
+// The row of a workspace that is gone stays in the list for ROW_MS more
+// (close): it gets lower from the height it had to nothing, cut the same
+// way, and fades, so the rows under it move up to their places.
 const ROW_MS = 200;
 
 const EaseRow = GObject.registerClass({
@@ -391,7 +395,50 @@ const EaseRow = GObject.registerClass({
         holdTransitions(this, ['grow']);
     }
 
+    /** Whether the row is on its way out, see close(). */
+    get closing() {
+        return this._closing === true;
+    }
+
+    /**
+     * The share it still takes of the space between it and the next row,
+     * see EaseList.
+     */
+    get gap() {
+        return this._closing ? 1 - this.grow : 1;
+    }
+
+    /**
+     * From the height it has to nothing over ROW_MS, then it is destroyed.
+     * It takes no clicks and no drops for that time.
+     */
+    close() {
+        if (this._closing)
+            return;
+        this._from = this.height;
+        this._closing = true;
+        this.reactive = false;
+        this.can_focus = false;
+        this._delegate = null;
+        this.remove_transition('grow');
+        this.grow = 0;
+        this.clip_to_allocation = true;
+        const mode = Clutter.AnimationMode.EASE_OUT_CUBIC;
+        this.ease_property('grow', 1, {
+            duration: ROW_MS,
+            mode,
+            onComplete: () => this.destroy(),
+        });
+        this.ease({opacity: 0, duration: ROW_MS, mode});
+        // With the rows that have just been built, as in growFrom().
+        holdTransitions(this, ['grow', 'opacity']);
+    }
+
     vfunc_get_preferred_height(forWidth) {
+        if (this._closing) {
+            const height = this._from * (1 - this.grow);
+            return [height, height];
+        }
         const [min, nat] = super.vfunc_get_preferred_height(forWidth);
         if (this.grow >= 1)
             return [min, nat];
@@ -404,7 +451,7 @@ const EaseRow = GObject.registerClass({
 
     vfunc_allocate(box) {
         const child = this.child;
-        if (this.grow >= 1 || !child) {
+        if ((this.grow >= 1 && !this._closing) || !child) {
             super.vfunc_allocate(box);
             return;
         }
@@ -424,6 +471,12 @@ const EaseRow = GObject.registerClass({
 // them as it does over a row that gets lower. For a row that is new it is
 // the space between two rows, taken off: that space is there from the first
 // frame, and the row itself starts at a height of 0.
+//
+// The list lays its rows out itself, one under the other. A row that is
+// closing takes one of the spaces between rows with it: the one after it,
+// by its share (EaseRow.gap), or the one before it when only closing rows
+// follow. With the whole space left until the row is destroyed, the rows
+// under it would move up by that space in the frame after.
 const EaseList = GObject.registerClass({
     Properties: {
         'tail': GObject.ParamSpec.double('tail', 'tail', 'tail',
@@ -442,10 +495,55 @@ const EaseList = GObject.registerClass({
         this.queue_relayout();
     }
 
+    /** The rows that stand for a workspace: not the ones that are closing. */
+    get rows() {
+        return this.get_children().filter(row => !row.closing);
+    }
+
+    /** The space after each of children, px: nothing after the last one. */
+    _gaps(children) {
+        const spacing = this.layout_manager?.spacing ?? 0;
+        // Only closing rows from here on.
+        let last = children.length;
+        while (last > 0 && children[last - 1].closing)
+            last--;
+        return children.map((child, i) => {
+            if (i === children.length - 1)
+                return 0;
+            if (i + 1 >= last)
+                return spacing * (children[i + 1].gap ?? 1);
+            return spacing * (child.gap ?? 1);
+        });
+    }
+
     vfunc_get_preferred_height(forWidth) {
-        const [min, nat] = super.vfunc_get_preferred_height(forWidth);
-        const tail = this.tail;
-        return [Math.max(0, min + tail), Math.max(0, nat + tail)];
+        const node = this.get_theme_node();
+        const width = node.adjust_for_width(forWidth);
+        const children = this.get_children().filter(child => child.visible);
+        const gaps = this._gaps(children);
+        let height = this.tail;
+        children.forEach((child, i) => {
+            height += child.get_preferred_height(width)[1] + gaps[i];
+        });
+        height = Math.max(0, height);
+        return node.adjust_preferred_height(height, height);
+    }
+
+    vfunc_allocate(box) {
+        this.set_allocation(box);
+        const content = this.get_theme_node().get_content_box(box);
+        const width = content.x2 - content.x1;
+        const children = this.get_children().filter(child => child.visible);
+        const gaps = this._gaps(children);
+        let y = content.y1;
+        children.forEach((child, i) => {
+            const [, height] = child.get_preferred_height(width);
+            const place = new Clutter.ActorBox();
+            place.set_origin(content.x1, y);
+            place.set_size(width, height);
+            child.allocate(place);
+            y += height + gaps[i];
+        });
     }
 });
 
@@ -1295,9 +1393,14 @@ class Minimap {
         const n = wm.get_n_workspaces();
         const active = wm.get_active_workspace_index();
         const focus = global.display.focus_window;
+        // The windows of each workspace, and the workspace: a row stands
+        // for a workspace, whatever its number is.
         const model = [];
-        for (let i = 0; i < n; i++)
-            model.push(this._tiling.windowsOf(wm.get_workspace_by_index(i)));
+        const spaces = [];
+        for (let i = 0; i < n; i++) {
+            spaces.push(wm.get_workspace_by_index(i));
+            model.push(this._tiling.windowsOf(spaces[i]));
+        }
         // With dynamic workspaces the shell keeps one empty workspace after
         // the last one in use. For a moment it has two: a new window (a file
         // chooser, for example) counts on the empty one until it is placed,
@@ -1309,7 +1412,9 @@ class Minimap {
             while (last > 0 && model[last].length === 0)
                 last--;
             model.length = Math.min(model.length, Math.max(last + 2, active + 1));
+            spaces.length = model.length;
         }
+        const activeSpace = spaces[active] ?? null;
 
         const primary = global.display.get_primary_monitor();
         const others = [];
@@ -1331,49 +1436,83 @@ class Minimap {
 
         // The title lines as they are now, before the rows are built again.
         const titleOf = row => row?._reveal
-            ? {index: row._index, share: row._reveal.share, text: row._caption.text} : null;
-        const before = titleOf(this._rows.get_children().find(r => r._reveal));
+            ? {space: row._space, share: row._reveal.share, text: row._caption.text} : null;
+        const before = titleOf(this._rows.rows.find(r => r._reveal));
         const beforeOn = new Map();
         for (const [monitor, card] of this._monitorCards)
             beforeOn.set(monitor, titleOf(card.surface.first_child));
 
         // The heights the rows have now, in the middle of an earlier
-        // change too: the new rows start from them.
-        const old = this._rows.get_children();
-        const ease = !this._plain && old.length > 0 && this._rows.mapped;
+        // change too: the new row of a workspace starts from the height
+        // the row of that workspace has.
+        const old = this._rows.rows;
+        const ease = !this._plain && old.length > 0 && this._rows.mapped &&
+            St.Settings.get().enable_animations;
         this._plain = false;
-        const heights = old.map(row => row.height);
+        const heights = new Map(old.map(row => [row._space, row.height]));
         const spacing = this._rows.layout_manager?.spacing ?? 0;
         let tail = this._rows.tail;
         // Where the icon of each window is drawn now, and at which place of
-        // which row it is: id -> {row, at, box, opacity}.
+        // the row of which workspace it is: id -> {space, at, box, opacity}.
         const places = new Map();
         if (ease) {
-            old.forEach((row, index) => row._slots?.forEach(({win, cell}, at) => {
-                const box = this._marked.drawnAt(cell);
-                if (box)
-                    places.set(win.get_id(), {row: index, at, box, opacity: row._cellBox?.opacity ?? 255});
-            }));
+            for (const row of old) {
+                row._slots?.forEach(({win, cell}, at) => {
+                    const box = this._marked.drawnAt(cell);
+                    if (!box)
+                        return;
+                    places.set(win.get_id(),
+                        {space: row._space, at, box, opacity: row._cellBox?.opacity ?? 255});
+                });
+            }
         }
         // The icons of the row of a workspace that has become the active
         // one grow in (_arrive). Not after a swipe: the icons of that row
-        // have grown to their size with the fingers.
-        const arrives = this._active !== undefined && this._active !== active &&
+        // have grown to their size with the fingers. A workspace that has
+        // another number because one before it is gone is the same one.
+        const arrives = this._activeSpace !== undefined && this._activeSpace !== activeSpace &&
             !this._collapsed && !this._morphed;
 
         this._hidePreview();
         this._marked.land();
-        this._rows.destroy_all_children();
-        model.forEach((wins, index) => {
-            this._rows.add_child(this._buildRow(index, wins, index === active, focus));
+        if (ease) {
+            // The row of a workspace that is gone closes where it is,
+            // before the row of the workspace that came after it (_next).
+            // Its icons are in other rows by now, or their windows gone.
+            old.forEach((row, index) => {
+                if (spaces.includes(row._space)) {
+                    row.destroy();
+                    return;
+                }
+                row._next = old.slice(index + 1).find(r => spaces.includes(r._space))?._space ?? null;
+                row._slots?.forEach(({cell}) => (cell.opacity = 0));
+                row.close();
+            });
+        } else {
+            this._rows.destroy_all_children();
+        }
+        const closing = this._rows.get_children();
+        const built = model.map((wins, index) => {
+            const row = this._buildRow(index, wins, index === active, focus);
+            row._space = spaces[index];
+            this._rows.add_child(row);
+            return row;
         });
+        // The rows in their order, each closing row before the row of the
+        // workspace that came after its own, or at the end.
+        const order = [];
+        for (const row of built)
+            order.push(...closing.filter(c => c._next === row._space), row);
+        order.push(...closing.filter(c => !order.includes(c)));
+        order.forEach((row, index) => this._rows.set_child_at_index(row, index));
         this._rows.remove_transition('tail');
         if (ease) {
-            const rows = this._rows.get_children();
-            rows.forEach((row, index) => row.growFrom(heights[index] ?? 0));
-            for (let i = rows.length; i < heights.length; i++)
-                tail += heights[i] + spacing;
-            tail -= Math.max(0, rows.length - heights.length) * spacing;
+            let added = 0;
+            for (const row of built) {
+                added += heights.has(row._space) ? 0 : 1;
+                row.growFrom(heights.get(row._space) ?? 0);
+            }
+            tail -= added * spacing;
         } else {
             tail = 0;
         }
@@ -1387,7 +1526,7 @@ class Minimap {
         }
         // The two fills move to the active workspace and to the icon of the
         // focused window.
-        const rows = this._rows.get_children();
+        const rows = built;
         const cellOf = id => {
             let cell = null;
             for (const row of rows)
@@ -1401,10 +1540,10 @@ class Minimap {
         const flights = [];
         rows.forEach((row, index) => row._slots?.forEach(({win, cell}, at) => {
             const was = places.get(win.get_id());
-            if (!was || (was.row === index && was.at === at))
+            if (!was || (was.space === row._space && was.at === at))
                 return;
             focusMoved ||= win === focus;
-            if (was.row !== index || !(arrives && index === active))
+            if (was.space !== row._space || !(arrives && index === active))
                 flights.push({win, cell, was, opacity: row._cellBox?.opacity ?? 255});
         }));
         // Two pictures that pass each other are drawn as their windows
@@ -1416,7 +1555,10 @@ class Minimap {
         for (const {cell, was, opacity} of flights)
             this._marked.fly(cell, was.box, [was.opacity, opacity]);
         const focused = focus ? cellOf(focus.get_id()) : null;
-        this._marked.rowMark.moveTo(rows[active] ?? null, active, ease);
+        // By its workspace: the row of a workspace that has another
+        // number now is the same target, and the fill stays on it as it
+        // moves up.
+        this._marked.rowMark.moveTo(rows[active] ?? null, activeSpace, ease);
         // With no focused window among the icons, on an empty workspace for
         // one, the fill fades out on the icon it was on.
         const mark = this._marked.cellMark;
@@ -1429,13 +1571,13 @@ class Minimap {
         // active workspace, and opens when it comes back. It starts from the
         // height the line of the same workspace had, with the title that
         // line showed while it closes.
-        this._settleCaption(this._rows.get_child_at_index(active),
-            before?.index === active ? before : null);
+        this._settleCaption(rows[active] ?? null,
+            before && before.space === activeSpace ? before : null);
         this._rebuildMonitors(others, focus, beforeOn);
         if (arrives)
-            this._arrive(this._rows.get_child_at_index(active));
+            this._arrive(rows[active] ?? null);
         this._morphed = false;
-        this._active = active;
+        this._activeSpace = activeSpace;
     }
 
     /**
@@ -1464,7 +1606,7 @@ class Minimap {
         if (this._destroyed)
             return;
         const {workspaces, windows} = this._tiling.between;
-        const rows = this._rows.get_children();
+        const rows = this._rows.rows;
         const cellOf = win => {
             for (const row of rows) {
                 const cell = row._slots?.find(slot => slot.win === win)?.cell;
@@ -1817,7 +1959,6 @@ class Minimap {
             }));
         }
         const slots = [];
-        row._index = index;
         row._sideBySide = grid;
         this._takeDrops(row, slots,
             (win, prev, next) => this._tiling.placeWindow(win, index, prev, next));
@@ -2045,7 +2186,7 @@ class Minimap {
     /** The workspace or monitor row under a stage point, and that point in the row. */
     _rowAt(x, y) {
         const rows = [
-            ...this._rows.get_children(),
+            ...this._rows.rows,
             ...[...this._monitorCards.values()].map(card => card.row),
         ];
         for (const row of rows) {
