@@ -98,6 +98,15 @@ const PAD = 1;
 
 export const HAVE_GLASS = HAVE_SNIPPETS;
 
+/**
+ * The sigma of the blur of a picture on a monitor of the given width, in
+ * the units of that width. level: 0 for the monitor's picture, 1 and up for
+ * the sharper ones, as in Glass.createLayer().
+ */
+export function blurSigma(level, monitorWidth) {
+    return monitorWidth * SIGMA / (level > 0 ? FINE[level - 1] : 1);
+}
+
 // kelp_step: from one sample to the next, in texture coordinates.
 // kelp_within: the first and the last texture coordinate of the picture
 // along the blur. A sample past them takes the picture's edge, so the blur

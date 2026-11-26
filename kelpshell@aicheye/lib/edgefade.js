@@ -2,12 +2,12 @@
 
 // Windows that scroll off the left of the view pass under the sidebar and
 // run on to the edge of the monitor. Under the sidebar they are darkened
-// towards black: by theme.shade (0.5) at the edge of the monitor, and less
+// towards black: by theme.shade (0.35) at the edge of the monitor, and less
 // from there on, across the whole width the sidebar reserves, with no part
 // where it stays the same.
 //
 // With theme.liveBlur they are blurred there too. The blur is full from the
-// edge of the monitor across theme.shadeRamp (0.25) of that width, and
+// edge of the monitor across theme.shadeRamp (0.1) of that width, and
 // lessens from there to nothing where the work area starts. Without it the
 // windows are sharp under the sidebar, and darkened as with it.
 //
@@ -36,13 +36,22 @@
 // easy to read between the cards and behind the downloads pile: the
 // darkening is half of theme.shade in the middle of the cards.
 //
-// theme.shade is 0.5, towards black, and lessens across the whole width, so
-// a white window is mid grey (#808080) at the edge of the monitor and
-// nowhere darker. A shade of 0.6 towards the tint makes a grey band as wide
-// as the sidebar over a white window, with a soft edge 15% of that width. A
-// shade of 1 towards black, full across 25% of the width and lessening
-// across the other 75%, about 138 px, makes a white window a black slab at
-// the edge of the monitor that goes to white within 100 px.
+// theme.shade is 0.35, towards black, and lessens across the whole width,
+// so a white window is #a6a6a6 at the edge of the monitor and nowhere
+// darker. A shade of 0.6 towards the tint makes a grey band as wide as the
+// sidebar over a white window, with a soft edge 15% of that width. A shade
+// of 1 towards black, full across 25% of the width and lessening across the
+// other 75%, about 138 px, makes a white window a black slab at the edge of
+// the monitor that goes to white within 100 px.
+//
+// Under the collapsed sidebar the width is 68 px in place of 198. With the
+// same darkening and the same four pictures there, a white window goes from
+// white to the grey of the edge within a third of the way, and its text is
+// blurred 24 px wide in a strip of 68. So both go by the width: the
+// darkening at the edge is theme.shade * width / 200 px (0.12 at 68 px),
+// which lessens by the same amount per pixel as under the wide sidebar, and
+// only the pictures with a blur of a seventh of the width or less are drawn
+// (3 and 6 px at 68 px).
 //
 // Where the shader that darkens the windows cannot be made (lib/corners.js
 // needs Cogl snippets and their uniforms in JavaScript), the windows fade
@@ -62,16 +71,24 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {setShade} from './corners.js';
-import {HAVE_GLASS} from './glass.js';
+import {HAVE_GLASS, blurSigma} from './glass.js';
 
 const SLICE = 2;        // px, fallback only
 // theme.shadeRamp when the configuration gives no number: where the blur
 // of the windows starts to lessen, as a share of the width the sidebar
 // reserves, from the edge of the monitor. The darkening does not use it.
-const RAMP_AT = 0.25;
+const RAMP_AT = 0.1;
 // theme.shade when the configuration gives no number: how far the windows
 // are mixed towards black at the edge of the monitor.
-const SHADE = 0.5;
+const SHADE = 0.35;
+// The width under the sidebar, px at a display scale of 1, from which the
+// darkening at the edge of the monitor is all of theme.shade. Under a
+// narrower sidebar it is less by as much as the width is, so it lessens by
+// the same amount per pixel under a wide and a narrow sidebar.
+const SHADE_WIDTH = 200;
+// The blur under the sidebar has a sigma of no more than this share of the
+// width under it.
+const BLUR_SHARE = 1 / 7;
 const RESIZE_MS = 240;  // the sidebar's collapse animation, see sidebar.js
 // The blurred windows end this many px before the first column starts. A
 // redraw is asked for 1 px larger than what changed, so with the layers up
@@ -153,9 +170,9 @@ export class EdgeFade {
         this._shadeKey = undefined;
         this.actor.destroy();
         this.actor = null;
-        // Its layer goes with it.
+        // Its layers go with it.
         this.frost.destroy();
-        this.frost = this._layers = null;
+        this.frost = this._layers = this._levels = null;
         this._wm.glass?.setFineArea(null);
         this._band = null;
     }
@@ -250,7 +267,11 @@ export class EdgeFade {
         // blur blurred. The wallpaper is not drawn over them.
         let shade = null;
         const wanted = Number(theme.shade);
-        const strength = Number.isFinite(wanted) ? Math.max(0, Math.min(1, wanted)) : SHADE;
+        let strength = Number.isFinite(wanted) ? Math.max(0, Math.min(1, wanted)) : SHADE;
+        if (band) {
+            const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+            strength *= Math.min(1, band.width / (SHADE_WIDTH * scale));
+        }
         if (HAVE_GLASS && band && strength > 0) {
             // ramp is x0: the darkening lessens from the edge of the monitor
             // on. A part at full strength reads as a band over a white window.
@@ -343,12 +364,19 @@ export class EdgeFade {
         }
     }
 
-    /** Show the blurred windows across place, {x, y, width, height}, or hide them (null). */
+    /**
+     * Show the blurred windows across place, a band (see sync()), or hide
+     * them (null).
+     */
     _syncFrost(place, rampAt) {
         const glass = this._wm.glass;
         if (!glass)
             place = null;
-        const key = JSON.stringify(place && [place.x, place.y, place.width, place.height, rampAt]);
+        // The sharpest picture in any case.
+        const levels = place && LEVELS.filter((level, i) => i === 0 ||
+            blurSigma(level, place.full[0]) <= place.width * BLUR_SHARE);
+        const key = JSON.stringify(place &&
+            [place.x, place.y, place.width, place.height, rampAt, levels]);
         if (key === this._frostKey)
             return;
         this._frostKey = key;
@@ -360,11 +388,15 @@ export class EdgeFade {
         }
         // The windows as they are: no tint, and the darkening is in them
         // already. The sharpest picture lies lowest.
-        this._layers ??= LEVELS.map(level => {
-            const layer = glass.createLayer([[0, 0, 0], 0, 1], level);
-            this.frost.add_child(layer);
-            return layer;
-        });
+        if (this._levels !== levels.join()) {
+            this._levels = levels.join();
+            this.frost.destroy_all_children();
+            this._layers = levels.map(level => {
+                const layer = glass.createLayer([[0, 0, 0], 0, 1], level);
+                this.frost.add_child(layer);
+                return layer;
+            });
+        }
         // Each picture comes in over one share of the width between where
         // the work area starts and rampAt, over the one before it, so the
         // blur doubles from one share to the next.
