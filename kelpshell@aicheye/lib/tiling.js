@@ -155,11 +155,11 @@ const SWIPE_REST_MS = 80;           // fingers that rested this long before lift
 const SWIPE_AGAIN_MS = 300;         // over a fullscreen window: a swipe this soon after one the same way does not go on from a window to the sidebar, or from the sidebar to a window
 
 // A window that fills the view heads for a place this far, px, towards the
-// side its column was moved to, at most this share of its width, and turns
-// back after NUDGE_OUT_MS: it gets seven tenths of the way there, 150 px
-// (Tile.nudgeBy).
+// side it was moved to, at most this share of its width or height, and
+// turns back after NUDGE_OUT_MS: it gets seven tenths of the way there,
+// 150 px (Tile.nudgeBy).
 const NUDGE_PX = 215;
-const NUDGE_WIDTH_SHARE = 0.125;
+const NUDGE_SHARE = 0.125;
 const NUDGE_OUT_MS = 90;
 
 // The strips as they were at the last disable(), for the next enable(): a
@@ -369,9 +369,10 @@ class Tile {
         // width, while it goes to its new place with the cards: {x, w,
         // free}, see Tiling.glideBegin. null otherwise.
         this._glide = null;
-        // px added to the x the window is drawn at, and the time in s
-        // until it turns back, see nudgeBy.
+        // px added to the x and the y the window is drawn at, and the time
+        // in s until it turns back, see nudgeBy.
         this.nudge = new Spring();
+        this.nudgeY = new Spring();
         this._nudgeLeft = 0;
         this.target = null;      // place on the strip, screen coordinates
         this.strip = null;
@@ -824,7 +825,7 @@ class Tile {
         const height = Math.round(h * k);
         return {
             x: Math.round(this.x.value + this.nudge.value + (w - width) / 2) + (this.strip?.push ?? 0),
-            y: Math.round(this.y.value + (h - height) / 2),
+            y: Math.round(this.y.value + this.nudgeY.value + (h - height) / 2),
             width, height,
         };
     }
@@ -1034,7 +1035,7 @@ class Tile {
         if (this.grabbed || this.fullscreen || !this.target) {
             this._parked = null;
             actor.translation_x = this.fullscreen ? Math.round(this.nudge.value) : 0;
-            actor.translation_y = 0;
+            actor.translation_y = this.fullscreen ? Math.round(this.nudgeY.value) : 0;
             this._setScale(1, 1, frame, buffer);
             // A dragged edge that asks for a larger frame, see holdResize.
             this._fillHeld();
@@ -1055,7 +1056,7 @@ class Tile {
         if (this._middle !== null)
             this._aroundMiddle(w);
         const vx = Math.round(this.x.value + this.nudge.value) + this.strip.push;
-        const vy = Math.round(this.y.value);
+        const vy = Math.round(this.y.value + this.nudgeY.value);
         let k = this.scale;
         let kx = frame.width > 0 ? k * w / frame.width : k;
         let ky = frame.height > 0 ? k * h / frame.height : k;
@@ -1237,33 +1238,39 @@ class Tile {
         if (!glide)
             this.w.step(dt, omega, zeta);
         this.h.step(dt, omega, zeta);
-        if (this.nudge.target !== 0) {
+        const nudges = [this.nudge, this.nudgeY];
+        if (nudges.some(n => n.target !== 0)) {
             this._nudgeLeft -= dt;
             if (this._nudgeLeft <= 0)
-                this.nudge.target = 0;
+                nudges.forEach(n => (n.target = 0));
         }
-        this.nudge.step(dt, omega, zeta);
+        nudges.forEach(n => n.step(dt, omega, zeta));
         this.sync();
         return !((!ownX || this.x.atRest) && this.y.atRest && this.shrink.atRest &&
             (!!glide || this.w.atRest) && this.h.atRest &&
-            this.nudge.atRest && this.nudge.target === 0);
+            nudges.every(n => n.atRest && n.target === 0));
     }
 
     /**
-     * Draw the window towards a side for a moment, dir -1 left or 1 right:
-     * it heads for a place NUDGE_PX that way on the spring the places use,
-     * and for its own place again after NUDGE_OUT_MS. The place it has on
-     * the strip and its frame stay as they are.
+     * Draw the window towards a side for a moment, dx -1 left or 1 right,
+     * dy -1 up or 1 down: it heads for a place NUDGE_PX that way on the
+     * spring the places use, and for its own place again after
+     * NUDGE_OUT_MS. The place it has on the strip and its frame stay as
+     * they are.
      *
-     * For a window that fills the view and whose column changes place on
-     * the strip (Tiling._nudgeFull). A key that repeats keeps it out.
+     * For a window that fills the view, when its column changes place on
+     * the strip (Tiling._nudgeFull) and when it goes to another workspace
+     * (Tiling.moveToWorkspace). A key that repeats keeps it out.
      */
-    nudgeBy(dir) {
+    nudgeBy(dx, dy = 0) {
         const animator = this.wm.animator;
         if (this.dead || this.grabbed || !animator.enabled)
             return;
-        const width = visibleRect(this.wm.config, this.win).width;
-        this.nudge.target = dir * Math.min(NUDGE_PX, width * NUDGE_WIDTH_SHARE);
+        const frame = visibleRect(this.wm.config, this.win);
+        if (dx)
+            this.nudge.target = dx * Math.min(NUDGE_PX, frame.width * NUDGE_SHARE);
+        if (dy)
+            this.nudgeY.target = dy * Math.min(NUDGE_PX, frame.height * NUDGE_SHARE);
         this._nudgeLeft = NUDGE_OUT_MS / 1000;
         animator.add(this);
     }
@@ -6356,14 +6363,39 @@ export class Tiling {
         wm.get_workspace_by_index(index).activate(global.get_current_time());
     }
 
+    /**
+     * Send a window to a workspace and go there with it.
+     *
+     * The shell draws the window in the workspace it goes to, which comes
+     * in from above or below. A fullscreen window, and one that is alone
+     * in a column as wide as the view, has the same place in both
+     * workspaces: it would be gone in one frame and come in again over the
+     * height of the monitor. It is drawn where it is while the workspaces
+     * change behind it, as the shell draws a window it moves itself
+     * (movingWindow), and is nudged the way it goes.
+     */
     moveToWorkspace(index, win = global.display.focus_window) {
         const wm = global.workspace_manager;
         if (!win || index < 0 || index >= wm.get_n_workspaces())
             return;
-        if (win.get_workspace()?.index() === index)
+        const from = win.get_workspace()?.index() ?? index;
+        if (from === index)
             return;
+        const tile = this.tiles.get(win);
+        const stays = !!tile?.column && this.animator.enabled && !!Main.wm._workspaceAnimation &&
+            (tile.fullscreen || (tile.column.tiles.length === 1 && this._fillsStrip(tile)));
+        const animation = Main.wm._workspaceAnimation;
+        if (stays)
+            animation.movingWindow = win;
         win.change_workspace_by_index(index, false);
         wm.get_workspace_by_index(index).activate_with_focus(win, global.get_current_time());
+        if (!stays)
+            return;
+        // The shell has made its animation by now, if it runs one. Left
+        // set with none run, the next change of workspace would draw the
+        // window as the one that moves.
+        animation.movingWindow = null;
+        tile.nudgeBy(0, Math.sign(index - from));
     }
 
     /**
