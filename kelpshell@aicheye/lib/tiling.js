@@ -4610,9 +4610,7 @@ export class Tiling {
     focusMonitor(monitor) {
         this.setActiveMonitor(monitor);
         const time = global.get_current_time();
-        const workspace = global.workspace_manager.get_active_workspace();
-        const next = global.display.get_tab_list(Meta.TabList.NORMAL, workspace)
-            .find(w => w.get_monitor() === monitor && !w.minimized && !isHelper(w));
+        const next = this.focusable(monitor);
         if (next) {
             next.activate(time);
             return;
@@ -4620,6 +4618,16 @@ export class Tiling {
         if (global.display.focus_window)
             global.display.unset_input_focus(time);
         this._makeCurrent(null);
+    }
+
+    /**
+     * The window a monitor gives the focus to, on the active workspace: the
+     * one used last that is not minimized. null when it shows no window.
+     */
+    focusable(monitor) {
+        const workspace = global.workspace_manager.get_active_workspace();
+        return global.display.get_tab_list(Meta.TabList.NORMAL, workspace)
+            .find(w => w.get_monitor() === monitor && !w.minimized && !isHelper(w)) ?? null;
     }
 
     /** The next new window opens on this monitor. The launcher calls this. */

@@ -73,6 +73,7 @@ export const DEFAULTS = {
         maxResults: 8,        // apps, windows and actions; other rows come after these
         searchProviders: true,  // files, settings and the rest of Settings > Search
         hotCorner: true,      // the pointer pushed into the top left corner opens it
+        typeToOpen: true,     // a letter or a digit typed on a monitor with no window opens it
         webSearch: 'https://www.google.com/search?q=%s',  // %s is the query; '' turns it off
         swipeLog: false,      // a line in the journal for each step of a four-finger swipe
     },

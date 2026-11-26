@@ -65,7 +65,7 @@ Each workspace is a horizontal strip of columns, in the style of [niri](https://
 
 ### Launcher
 
-Tap `Super`, or press `Super+Space`.
+Tap `Super`, or press `Super+Space`. On an empty workspace, start typing.
 
 <img src="docs/screenshots/launcher.png" width="640" alt="The launcher with results for the query cal">
 

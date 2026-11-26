@@ -284,6 +284,11 @@ export class Launcher {
             return Clutter.EVENT_PROPAGATE;
         }, this);
 
+        // A key that no window and no actor of the shell takes arrives at
+        // the stage.
+        global.stage.connectObject('key-press-event',
+            (_a, event) => this._onStageKey(event), this);
+
         this._entry = new St.Entry({
             style_class: 'kelp-launcher-entry',
             hint_text: 'Search apps, files and the web',
@@ -678,6 +683,34 @@ export class Launcher {
     }
 
     // ---- input ----
+
+    /**
+     * A key was pressed with the keyboard on no window. On a monitor that
+     * shows no window, a letter or a digit opens the launcher with that
+     * character in the search field, and the keys after it go to the field.
+     *
+     * Not with a window on the monitor: the focus is on no window for a
+     * moment when one closes, and a key typed then would open the launcher.
+     */
+    _onStageKey(event) {
+        if (this.isOpen || !this._config.values.launcher.typeToOpen ||
+            Main.actionMode !== Shell.ActionMode.NORMAL)
+            return Clutter.EVENT_PROPAGATE;
+        // Shift is left out: a capital letter opens it too.
+        const M = Clutter.ModifierType;
+        const held = M.CONTROL_MASK | M.MOD1_MASK | M.SUPER_MASK | M.META_MASK | M.HYPER_MASK;
+        if (event.get_state() & held)
+            return Clutter.EVENT_PROPAGATE;
+        const char = event.get_key_unicode();
+        if (!/^[\p{L}\p{N}]$/u.test(char))
+            return Clutter.EVENT_PROPAGATE;
+        if (global.display.focus_window || this._tiling.focusable(this._tiling.activeMonitor))
+            return Clutter.EVENT_PROPAGATE;
+        if (!this.open())
+            return Clutter.EVENT_PROPAGATE;
+        this.insert(char);
+        return Clutter.EVENT_STOP;
+    }
 
     _onKey(event) {
         const symbol = event.get_key_symbol();
