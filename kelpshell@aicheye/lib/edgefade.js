@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Windows that scroll off the left of the view pass under the sidebar and
-// fade into the wallpaper. Without the fade they stop at a hard vertical line
-// next to the cards.
+// run on to the edge of the monitor. Under the sidebar they are darkened
+// towards black: by theme.shade (0.5) at the edge of the monitor, and less
+// from there on, across the whole width the sidebar reserves, with no part
+// where it stays the same.
 //
-// The fade is the wallpaper drawn over the windows, opaque at the monitor
-// edge and transparent where the work area starts plus layout.gap. It runs
-// across the whole width the sidebar reserves: a shorter ramp reads as a hard
-// dark edge on a dark wallpaper.
-//
-// With theme.liveBlur there is no fade: the windows run on to the edge of
-// the monitor, and under the sidebar they are blurred and darkened towards
-// black. The blur is full from the edge of the monitor across
-// theme.shadeRamp (0.25) of the width the sidebar reserves, and lessens from
-// there to nothing where the work area starts. The darkening is theme.shade
-// (0.5) at the edge of the monitor and lessens from there on, across the
-// whole width, with no part where it stays the same.
+// With theme.liveBlur they are blurred there too. The blur is full from the
+// edge of the monitor across theme.shadeRamp (0.25) of that width, and
+// lessens from there to nothing where the work area starts. Without it the
+// windows are sharp under the sidebar, and darkened as with it.
 //
 // The blur is drawn here over the windows across that whole width, so the
 // windows are blurred between the cards too. It is four pictures of the
@@ -50,10 +44,14 @@
 // across the other 75%, about 138 px, makes a white window a black slab at
 // the edge of the monitor that goes to white within 100 px.
 //
-// The gradient is a fragment shader on one clone of the wallpaper actor, so
-// the opacity changes on every pixel column. Where Cogl snippets are not
-// available to JavaScript, it falls back to a row of 2 px wide clones, each
-// with its own opacity, which shows steps on a bright window.
+// Where the shader that darkens the windows cannot be made (lib/corners.js
+// needs Cogl snippets and their uniforms in JavaScript), the windows fade
+// into the wallpaper instead: the wallpaper is drawn over them, opaque at
+// the monitor edge and transparent where the work area starts plus
+// layout.gap. The gradient is a fragment shader on one clone of the
+// wallpaper actor, so the opacity changes on every pixel column. Without
+// Cogl snippets it is a row of 2 px wide clones, each with its own opacity,
+// which shows steps on a bright window.
 
 import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
@@ -162,7 +160,10 @@ export class EdgeFade {
         this._band = null;
     }
 
-    /** The fade's place, {monitor, x, y, width, height}, or null for none. */
+    /**
+     * The place of the wallpaper drawn over the windows, {monitor, x, y,
+     * width, height}, or null for none: the windows are darkened instead.
+     */
     get band() {
         return this._band;
     }
@@ -223,10 +224,11 @@ export class EdgeFade {
         const source = manager?.backgroundActor ?? null;
         let band = null;
         const theme = this._wm.config.values.theme;
+        // HAVE_GLASS: the windows have the shader that darkens them.
         const live = HAVE_GLASS && theme.liveBlur === true;
         const set = Number(theme.shadeRamp);
         const rampAt = Number.isFinite(set) ? Math.max(0, Math.min(0.999, set)) : RAMP_AT;
-        if (monitor && (live || source) && !global.display.get_monitor_in_fullscreen(index)) {
+        if (monitor && (HAVE_GLASS || source) && !global.display.get_monitor_in_fullscreen(index)) {
             const ws = global.workspace_manager.get_active_workspace();
             const area = ws.get_work_area_for_monitor(index);
             const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
@@ -244,12 +246,12 @@ export class EdgeFade {
                 };
             }
         }
-        // With the live blur the band is where the windows are darkened,
-        // and nothing is drawn over them.
+        // The band is where the windows are darkened, and with the live
+        // blur blurred. The wallpaper is not drawn over them.
         let shade = null;
         const wanted = Number(theme.shade);
         const strength = Number.isFinite(wanted) ? Math.max(0, Math.min(1, wanted)) : SHADE;
-        if (live && band && strength > 0) {
+        if (HAVE_GLASS && band && strength > 0) {
             // ramp is x0: the darkening lessens from the edge of the monitor
             // on. A part at full strength reads as a band over a white window.
             shade = {
@@ -267,7 +269,7 @@ export class EdgeFade {
             this._wm.corners?.syncAll();
         }
         this._syncFrost(live ? band : null, rampAt);
-        if (live)
+        if (HAVE_GLASS)
             band = null;
 
         if (manager !== this._manager) {
@@ -290,7 +292,8 @@ export class EdgeFade {
         const animate = St.Settings.get().enable_animations;
         actor.remove_all_transitions();
         if (!band) {
-            // Fullscreen, the live blur, or nothing reserves the edge any more.
+            // Fullscreen, the windows are darkened instead, or nothing
+            // reserves the edge any more.
             actor.ease({
                 opacity: 0,
                 duration: animate ? SHOW_MS : 0,

@@ -62,9 +62,9 @@ export const DEFAULTS = {
         tintStrength: 0.72,   // 0 = raw blurred wallpaper, 1 = flat tint
         saturation: 1.6,      // wallpaper colour boost before tinting
         blur: 6,              // number of half-resolution blur passes
-        liveBlur: true,       // the sidebar's cards blur the windows under them; false: windows fade out under the sidebar
+        liveBlur: true,       // the sidebar's cards blur the windows under them; false: windows are only darkened under the sidebar
         liveBlurTint: 0.7,    // how far the blurred windows are mixed toward the tint; 1 = no blur to see
-        shade: 0.5,           // with liveBlur: how far windows are darkened towards black at the edge of the monitor; 0 = off, 1 = black
+        shade: 0.5,           // how far windows under the sidebar are darkened towards black at the edge of the monitor; 0 = off, 1 = black
         shadeRamp: 0.25,      // where the blur starts to lessen, as a share of the width under the sidebar
         lockTint: 0.3,        // how far the lock screen's wallpaper is mixed toward the tint; 0 = the blurred wallpaper as it is
     },

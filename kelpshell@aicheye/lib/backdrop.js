@@ -22,8 +22,9 @@
 // cards have that colour as their background.
 //
 // With theme.liveBlur the cards of the sidebar show the windows under them,
-// blurred, over this picture, see lib/glass.js. Everything else that has
-// the material (the launcher, the popups) shows the picture alone.
+// blurred, over this picture, see lib/glass.js. With it off they are the
+// flat tint, with no picture. Everything else that has the material (the
+// launcher, the popups) shows the picture alone.
 
 import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
@@ -36,7 +37,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {Glass} from './glass.js';
+import {Glass, HAVE_GLASS} from './glass.js';
 
 const BASE_DIVISOR = 4;   // the stored image is 1/4 of the monitor size
 const CACHE_KEEP = 6;     // pictures kept in the cache that are not shown now
@@ -849,6 +850,21 @@ export class Backdrop {
         return `background-color: rgba(${t >> 16}, ${(t >> 8) & 255}, ${t & 255}, ${this._opacity()});`;
     }
 
+    /**
+     * Whether a card of the sidebar is the flat tint in place of the
+     * picture. With theme.liveBlur off the windows run on under the cards,
+     * darkened and sharp (lib/edgefade.js), and a card with the picture
+     * shows the colours of the wallpaper over a window.
+     *
+     * The tint has theme.opacity. At 0.7, the strength it has over the
+     * blur, the text of a white window is 57 levels of 255 darker than
+     * its page under the text of the card. At 0.95 it is 10.
+     */
+    _plain() {
+        return HAVE_GLASS && this._liveAllowed &&
+            this._config.values.theme.liveBlur !== true;
+    }
+
     _removeFile(path) {
         if (path)
             GLib.unlink(path);
@@ -954,6 +970,8 @@ export class Backdrop {
         // The bin the actor is in draws the material.
         if (this.glass.active && this._live.has(actor))
             return 'background-color: transparent;';
+        if (this._live.has(actor) && this._plain())
+            return this._flat();
         const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
         // An actor that has never been allocated reports an infinite box.
         const [x, y] = restingPosition(actor);

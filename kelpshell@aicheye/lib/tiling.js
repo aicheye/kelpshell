@@ -1799,9 +1799,9 @@ class Strip {
         const gap = this.gap;
         // The view is the whole monitor, so a window that scrolls off to the
         // left runs on behind the sidebar cards and is cut off only at the
-        // edge of the monitor. On the primary monitor the cards blur that
-        // part of the window (lib/glass.js), or with theme.liveBlur off it
-        // fades into the wallpaper (lib/edgefade.js). The cards are chrome
+        // edge of the monitor. On the primary monitor that part of the
+        // window is darkened (lib/edgefade.js), and with theme.liveBlur the
+        // cards blur it (lib/glass.js). The cards are chrome
         // and are drawn above the windows. A cut at the work area would
         // end the window in a vertical line next to the sidebar.
         const mon = this.monitorRect;
