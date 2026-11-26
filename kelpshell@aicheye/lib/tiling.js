@@ -3617,6 +3617,7 @@ export class Tiling {
         this.between = {windows: null, workspaces: null};
         this._betweenListeners = new Set();
         this._slide = null;            // the MonitorGroup the shell slides the workspaces in
+        this._movingWindow = null;     // the window a key is sending to another workspace, see moveToWorkspace
         this.glass = null;
     }
 
@@ -5793,8 +5794,12 @@ export class Tiling {
         const tiling = this;
         this._switchPatch = {group, createBackground, monitorGroup, init};
         group._createBackground = function () {};
-        monitorGroup._init = function (monitor, ...rest) {
-            init.call(this, monitor, ...rest);
+        // The window a key sends to another workspace is the moving window
+        // of the switch, see moveToWorkspace. The shell's own field for it
+        // is cleared when a switch that is still running is ended for the
+        // new one, which is after the key and before these are made.
+        monitorGroup._init = function (monitor, indices, moving, ...rest) {
+            init.call(this, monitor, indices, tiling._movingWindow ?? moving, ...rest);
             try {
                 decorateSwitch(this, monitor, tiling.fade, tiling.glass);
                 if (monitor.index === Main.layoutManager.primaryIndex)
@@ -6389,10 +6394,15 @@ export class Tiling {
         const tile = this.tiles.get(win);
         const fills = !!tile?.column &&
             (tile.fullscreen || (tile.column.tiles.length === 1 && this._fillsStrip(tile)));
+        // For the groups the shell makes for the switch, see
+        // _patchSwitchBackdrop. The shell's field is set for a shell
+        // whose groups could not be patched.
+        this._movingWindow = animation ? win : null;
         if (animation)
             animation.movingWindow = win;
         win.change_workspace_by_index(index, false);
         wm.get_workspace_by_index(index).activate_with_focus(win, global.get_current_time());
+        this._movingWindow = null;
         if (!animation)
             return;
         // The shell has made its animation by now, if it runs one. Left
