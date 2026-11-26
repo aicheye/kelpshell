@@ -154,6 +154,14 @@ const SWIPE_VELOCITY_MS = 120;      // the release velocity is measured over thi
 const SWIPE_REST_MS = 80;           // fingers that rested this long before lifting have no velocity
 const SWIPE_AGAIN_MS = 300;         // over a fullscreen window: a swipe this soon after one the same way does not go on from a window to the sidebar, or from the sidebar to a window
 
+// A window that fills the view heads for a place this far, px, towards the
+// side its column was moved to, at most this share of its width, and turns
+// back after NUDGE_OUT_MS: it gets seven tenths of the way there, 150 px
+// (Tile.nudgeBy).
+const NUDGE_PX = 215;
+const NUDGE_WIDTH_SHARE = 0.125;
+const NUDGE_OUT_MS = 90;
+
 // The strips as they were at the last disable(), for the next enable(): a
 // lock of the screen takes the tiling down and an unlock starts it again
 // (extension.js). See Tiling._save() for what is kept.
@@ -361,6 +369,10 @@ class Tile {
         // width, while it goes to its new place with the cards: {x, w,
         // free}, see Tiling.glideBegin. null otherwise.
         this._glide = null;
+        // px added to the x the window is drawn at, and the time in s
+        // until it turns back, see nudgeBy.
+        this.nudge = new Spring();
+        this._nudgeLeft = 0;
         this.target = null;      // place on the strip, screen coordinates
         this.strip = null;
         this.column = null;
@@ -811,7 +823,7 @@ class Tile {
         const width = Math.round(w * k);
         const height = Math.round(h * k);
         return {
-            x: Math.round(this.x.value + (w - width) / 2) + (this.strip?.push ?? 0),
+            x: Math.round(this.x.value + this.nudge.value + (w - width) / 2) + (this.strip?.push ?? 0),
             y: Math.round(this.y.value + (h - height) / 2),
             width, height,
         };
@@ -1021,7 +1033,7 @@ class Tile {
         const buffer = this.win.get_buffer_rect();
         if (this.grabbed || this.fullscreen || !this.target) {
             this._parked = null;
-            actor.translation_x = 0;
+            actor.translation_x = this.fullscreen ? Math.round(this.nudge.value) : 0;
             actor.translation_y = 0;
             this._setScale(1, 1, frame, buffer);
             // A dragged edge that asks for a larger frame, see holdResize.
@@ -1042,7 +1054,7 @@ class Tile {
         let [w, h] = this._size(frame);
         if (this._middle !== null)
             this._aroundMiddle(w);
-        const vx = Math.round(this.x.value) + this.strip.push;
+        const vx = Math.round(this.x.value + this.nudge.value) + this.strip.push;
         const vy = Math.round(this.y.value);
         let k = this.scale;
         let kx = frame.width > 0 ? k * w / frame.width : k;
@@ -1225,9 +1237,35 @@ class Tile {
         if (!glide)
             this.w.step(dt, omega, zeta);
         this.h.step(dt, omega, zeta);
+        if (this.nudge.target !== 0) {
+            this._nudgeLeft -= dt;
+            if (this._nudgeLeft <= 0)
+                this.nudge.target = 0;
+        }
+        this.nudge.step(dt, omega, zeta);
         this.sync();
         return !((!ownX || this.x.atRest) && this.y.atRest && this.shrink.atRest &&
-            (!!glide || this.w.atRest) && this.h.atRest);
+            (!!glide || this.w.atRest) && this.h.atRest &&
+            this.nudge.atRest && this.nudge.target === 0);
+    }
+
+    /**
+     * Draw the window towards a side for a moment, dir -1 left or 1 right:
+     * it heads for a place NUDGE_PX that way on the spring the places use,
+     * and for its own place again after NUDGE_OUT_MS. The place it has on
+     * the strip and its frame stay as they are.
+     *
+     * For a window that fills the view and whose column changes place on
+     * the strip (Tiling._nudgeFull). A key that repeats keeps it out.
+     */
+    nudgeBy(dir) {
+        const animator = this.wm.animator;
+        if (this.dead || this.grabbed || !animator.enabled)
+            return;
+        const width = visibleRect(this.wm.config, this.win).width;
+        this.nudge.target = dir * Math.min(NUDGE_PX, width * NUDGE_WIDTH_SHARE);
+        this._nudgeLeft = NUDGE_OUT_MS / 1000;
+        animator.add(this);
     }
 
     /** resetActor is false when the window is closing, so it does not jump. */
@@ -6440,6 +6478,22 @@ export class Tiling {
         strip.columns.splice(idx, 1);
         strip.columns.splice(to, 0, tile.column);
         this._relayout(strip, tile);
+        this._nudgeFull(tile, delta);
+    }
+
+    /**
+     * The column of tile has changed place on its strip, towards dir (-1
+     * left, 1 right). A fullscreen window, and a column as wide as the
+     * view, is drawn at the same place before and after: the view follows
+     * the column, and only its neighbours move, behind it. Its windows are
+     * nudged that way, so the key shows on the window it moved.
+     */
+    _nudgeFull(tile, dir) {
+        const col = tile.column;
+        if (!col || !(tile.fullscreen || tile.strip.fillsView(col)))
+            return;
+        for (const t of col.tiles)
+            t.nudgeBy(Math.sign(dir));
     }
 
     moveColumnToEdge(last) {
@@ -6451,12 +6505,15 @@ export class Tiling {
             return;
         }
         const strip = tile.strip;
-        strip.columns.splice(strip.columns.indexOf(tile.column), 1);
+        const idx = strip.columns.indexOf(tile.column);
+        strip.columns.splice(idx, 1);
         if (last)
             strip.columns.push(tile.column);
         else
             strip.columns.unshift(tile.column);
         this._relayout(strip, tile);
+        if (strip.columns.indexOf(tile.column) !== idx)
+            this._nudgeFull(tile, last ? 1 : -1);
     }
 
     /**

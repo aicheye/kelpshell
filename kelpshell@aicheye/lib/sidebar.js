@@ -567,8 +567,11 @@ const Mark = GObject.registerClass({
      * at once. rest: with no target, the actor the mark fades out on. It
      * goes there from where it is over ROW_MS, as the rows take their new
      * heights, and fades for as long. Without one it fades where it is.
+     * moved: the target stands for the same thing as before at another
+     * place, an icon whose window was moved: the mark goes there as the
+     * icon does (Flyer).
      */
-    moveTo(actor, key, animate, rest = null) {
+    moveTo(actor, key, animate, rest = null, moved = false) {
         const before = this.key;
         const last = this.last;
         const target = actor ?? rest;
@@ -621,7 +624,7 @@ const Mark = GObject.registerClass({
         if (!animate) {
             this.remove_transition('progress');
             this.progress = 1;
-        } else if (this.key !== before) {
+        } else if (this.key !== before || moved) {
             this.remove_transition('progress');
             // From where it is, also while it fades out on the icon it
             // has just left: the focus is on no window for a moment in
@@ -640,7 +643,82 @@ const Mark = GObject.registerClass({
     }
 });
 
-// The list of the minimap with its two marks under it.
+// An icon of the minimap on its way to a new place: the icon of a window
+// that was moved along its strip or to another workspace, and the icons that
+// make room for it.
+//
+// The rows are built again at every change, so such an icon would be gone
+// from one place and there at another in one frame. A picture of the new
+// icon is drawn in its place, from where the old icon was (from) to where
+// the new one is, by progress, as a Mark is. The icon itself is not drawn
+// for that time. It is not the icon that is moved: a row that takes a new
+// height cuts what is in it (EaseRow), and an icon that comes from another
+// row would be drawn only once it is inside its own.
+//
+// The picture has the size of the place it is at, so an icon that goes to a
+// row with smaller icons gets smaller on the way. A clone is drawn without
+// the opacity of what its source is in: it has the opacity the icons of the
+// row it left had, and goes to that of the row it is in now.
+const Flyer = GObject.registerClass({
+    Properties: {
+        'progress': GObject.ParamSpec.double('progress', 'progress', 'progress',
+            GObject.ParamFlags.READWRITE, 0, 1, 0),
+    },
+}, class KelpFlyer extends Clutter.Clone {
+    _init(cell, from, opacity) {
+        super._init({source: cell, reactive: false, opacity});
+        this.cell = cell;
+        this.from = from;   // [x, y, width, height] in the list
+        this.box = from;    // where it was put by the last layout
+        cell._flying = true;
+        cell.opacity = 0;
+        cell.connectObject('destroy', () => {
+            this.cell = null;
+            this.destroy();
+        }, this);
+        // The icon is drawn again, unless it is gone first.
+        this.connect('destroy', () => {
+            const shown = this.cell;
+            this.cell = null;
+            if (!shown)
+                return;
+            shown.disconnectObject(this);
+            shown._flying = false;
+            shown.opacity = 255;
+        });
+    }
+
+    get progress() {
+        return this._progress ?? 0;
+    }
+
+    set progress(value) {
+        if (value === this._progress)
+            return;
+        this._progress = value;
+        this.notify('progress');
+        this.get_parent()?.queue_relayout();
+    }
+
+    /** To the place of its icon over ROW_MS, and to the opacity the icons there have. */
+    start(opacity) {
+        this.ease_property('progress', 1, {
+            duration: ROW_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onComplete: () => this.destroy(),
+        });
+        const held = ['progress'];
+        if (opacity !== this.opacity) {
+            this.ease({opacity, duration: ROW_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            held.push('opacity');
+        }
+        // The rows have just been built, as in EaseRow.growFrom().
+        holdTransitions(this, held);
+    }
+});
+
+// The list of the minimap with its two marks under it, and over it the icons
+// that are on their way to a new place.
 const MarkedList = GObject.registerClass(
 class KelpMarkedList extends St.Viewport {
     _init(list) {
@@ -650,6 +728,38 @@ class KelpMarkedList extends St.Viewport {
         this.add_child(this.rowMark);
         this.add_child(this.cellMark);
         this.add_child(list);
+    }
+
+    /**
+     * Where an icon of the list is drawn now, [x, y, width, height] in this
+     * actor: the place of its picture while it is on its way. null for one
+     * that has not been laid out.
+     */
+    drawnAt(cell) {
+        const flyer = this.get_children().find(a => a instanceof Flyer && a.cell === cell);
+        if (flyer)
+            return flyer.box;
+        return cell.has_allocation() ? this._place(cell) : null;
+    }
+
+    /**
+     * Draw cell, an icon that has just been built, from `from` to its
+     * place. opacity: of the picture at `from`, and at the place.
+     */
+    fly(cell, from, [before, after]) {
+        if (!St.Settings.get().enable_animations)
+            return;
+        const flyer = new Flyer(cell, from, before);
+        this.add_child(flyer);
+        flyer.start(after);
+    }
+
+    /** The icons are built again: the pictures on their way are gone with them. */
+    land() {
+        for (const actor of this.get_children()) {
+            if (actor instanceof Flyer)
+                actor.destroy();
+        }
     }
 
     /** [x, y, width, height] of an actor of the list, in this actor. */
@@ -688,6 +798,17 @@ class KelpMarkedList extends St.Viewport {
             }
             mark.box = at;
             mark.allocate(new Clutter.ActorBox({
+                x1: at[0], y1: at[1], x2: at[0] + at[2], y2: at[1] + at[3],
+            }));
+        }
+        for (const flyer of this.get_children()) {
+            if (!(flyer instanceof Flyer))
+                continue;
+            const to = flyer.cell ? this._place(flyer.cell) : null;
+            const t = flyer.progress;
+            const at = to ? flyer.from.map((v, i) => v + (to[i] - v) * t) : flyer.box;
+            flyer.box = at;
+            flyer.allocate(new Clutter.ActorBox({
                 x1: at[0], y1: at[1], x2: at[0] + at[2], y2: at[1] + at[3],
             }));
         }
@@ -1224,8 +1345,24 @@ class Minimap {
         const heights = old.map(row => row.height);
         const spacing = this._rows.layout_manager?.spacing ?? 0;
         let tail = this._rows.tail;
+        // Where the icon of each window is drawn now, and at which place of
+        // which row it is: id -> {row, at, box, opacity}.
+        const places = new Map();
+        if (ease) {
+            old.forEach((row, index) => row._slots?.forEach(({win, cell}, at) => {
+                const box = this._marked.drawnAt(cell);
+                if (box)
+                    places.set(win.get_id(), {row: index, at, box, opacity: row._cellBox?.opacity ?? 255});
+            }));
+        }
+        // The icons of the row of a workspace that has become the active
+        // one grow in (_arrive). Not after a swipe: the icons of that row
+        // have grown to their size with the fingers.
+        const arrives = this._active !== undefined && this._active !== active &&
+            !this._collapsed && !this._morphed;
 
         this._hidePreview();
+        this._marked.land();
         this._rows.destroy_all_children();
         model.forEach((wins, index) => {
             this._rows.add_child(this._buildRow(index, wins, index === active, focus));
@@ -1257,6 +1394,18 @@ class Minimap {
                 cell ??= row._slots?.find(slot => slot.win.get_id() === id)?.cell ?? null;
             return cell;
         };
+        // An icon whose window is at another place of its row, or in
+        // another row, goes there from where it was drawn (Flyer). In the
+        // row that grows in, only the icons that came from another row.
+        let focusMoved = false;
+        rows.forEach((row, index) => row._slots?.forEach(({win, cell}, at) => {
+            const was = places.get(win.get_id());
+            if (!was || (was.row === index && was.at === at))
+                return;
+            focusMoved ||= win === focus;
+            if (was.row !== index || !(arrives && index === active))
+                this._marked.fly(cell, was.box, [was.opacity, row._cellBox?.opacity ?? 255]);
+        }));
         const focused = focus ? cellOf(focus.get_id()) : null;
         this._marked.rowMark.moveTo(rows[active] ?? null, active, ease);
         // With no focused window among the icons, on an empty workspace for
@@ -1264,7 +1413,7 @@ class Minimap {
         const mark = this._marked.cellMark;
         const left = mark.key ?? mark.last;
         mark.moveTo(focused, focus?.get_id(), ease,
-            focused || left === null ? null : cellOf(left));
+            focused || left === null ? null : cellOf(left), focusMoved);
         // A swipe that holds a fill holds it between the new rows.
         this._syncBetween();
         // The title line closes when the focus leaves the windows of the
@@ -1274,10 +1423,7 @@ class Minimap {
         this._settleCaption(this._rows.get_child_at_index(active),
             before?.index === active ? before : null);
         this._rebuildMonitors(others, focus, beforeOn);
-        // Not after a swipe: the icons of that row have grown to their
-        // size with the fingers.
-        if (this._active !== undefined && this._active !== active && !this._collapsed &&
-            !this._morphed)
+        if (arrives)
             this._arrive(this._rows.get_child_at_index(active));
         this._morphed = false;
         this._active = active;
@@ -1576,9 +1722,14 @@ class Minimap {
         return named;
     }
 
-    /** Grow the icons of a row in, one after the other. */
+    /**
+     * Grow the icons of a row in, one after the other. Not an icon that
+     * comes from another row: its picture is on its way here (Flyer).
+     */
     _arrive(row) {
         row?._slots.forEach(({cell}, i) => {
+            if (cell._flying)
+                return;
             cell.set_pivot_point(0.5, 0.5);
             cell.set_scale(ARRIVE_SCALE, ARRIVE_SCALE);
             cell.opacity = 0;

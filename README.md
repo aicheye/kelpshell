@@ -58,6 +58,7 @@ Each workspace is a horizontal strip of columns, in the style of [niri](https://
 - The view scrolls the least distance that shows the focused column. A column that scrolls off to the left runs on under the sidebar, blurred.
 - A column holds one window or several stacked vertically.
 - `Super+R` cycles the column width through 1/3, 1/2 and 2/3 of the screen. `Super+F` toggles full width. The width set for an app is remembered.
+- A full-width or fullscreen window fills the view wherever its column is. When its column is moved, the window is nudged that way and settles back.
 - Drag a window onto another to stack them, or between two columns to put it there. A cue shows where it lands.
 - Dialogs, fixed-size windows and windows set always on top float. `Super+T` floats or tiles any window. The focus, move, align and width keys work on a floating window too.
 - Workspaces are stacked vertically and slide with their wallpaper.
@@ -132,7 +133,7 @@ Everything follows the style chosen in Settings > Appearance, the shell's own po
 | Four fingers up or down | Open or close the launcher |
 | Three fingers sideways over a fullscreen window | Bring the next window, or the sidebar, in over it |
 
-During a swipe, the minimap's highlights of the active workspace and of the focused window move with the fingers. Between two workspaces their rows change with them too: the icons grow and shrink, and the title line opens and closes.
+During a swipe, the minimap's highlights of the active workspace and of the focused window move with the fingers. Between two workspaces their rows change with them too: the icons grow and shrink, and the title line opens and closes. The icon of a window that is moved slides to its new place.
 
 Two-finger scrolling is evened out between toolkits, so GTK, Firefox, Chromium and Visual Studio Code windows scroll the same distance for the same movement.
 
