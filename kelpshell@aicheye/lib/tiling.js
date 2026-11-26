@@ -1258,10 +1258,9 @@ class Tile {
      * NUDGE_OUT_MS. The place it has on the strip and its frame stay as
      * they are.
      *
-     * For a window that fills the view when its column changes place on
-     * the strip (Tiling._nudgeFull), and for any window that goes to
-     * another workspace (Tiling.moveToWorkspace). A key that repeats keeps
-     * it out.
+     * For a window that fills the view, when its column changes place on
+     * the strip (Tiling._nudgeFull) and when it goes to another workspace
+     * (Tiling.moveToWorkspace). A key that repeats keeps it out.
      */
     nudgeBy(dx, dy = 0) {
         const animator = this.wm.animator;
@@ -6372,8 +6371,12 @@ export class Tiling {
      * from its place in one frame and come in again with the new
      * workspace, from above or below. It is the shell's moving window for
      * the switch (as in the shell's own actionMoveWindow): it is drawn
-     * where it is while the workspaces change behind it. A tile glides to
-     * the place it has on the new strip, and is nudged the way it goes.
+     * where it is while the workspaces change behind it, and a tile
+     * glides to the place it has on the new strip.
+     *
+     * A fullscreen window, and one that is alone in a column as wide as
+     * the view, has the same place on both strips and would stand still:
+     * it is nudged the way it goes.
      */
     moveToWorkspace(index, win = global.display.focus_window) {
         const wm = global.workspace_manager;
@@ -6383,6 +6386,9 @@ export class Tiling {
         if (from === index)
             return;
         const animation = this.animator.enabled ? Main.wm._workspaceAnimation : null;
+        const tile = this.tiles.get(win);
+        const fills = !!tile?.column &&
+            (tile.fullscreen || (tile.column.tiles.length === 1 && this._fillsStrip(tile)));
         if (animation)
             animation.movingWindow = win;
         win.change_workspace_by_index(index, false);
@@ -6393,7 +6399,8 @@ export class Tiling {
         // set with none run, the next change of workspace would draw the
         // window as the one that moves.
         animation.movingWindow = null;
-        this.tiles.get(win)?.nudgeBy(0, Math.sign(index - from));
+        if (fills)
+            tile.nudgeBy(0, Math.sign(index - from));
     }
 
     /**
