@@ -1398,14 +1398,23 @@ class Minimap {
         // another row, goes there from where it was drawn (Flyer). In the
         // row that grows in, only the icons that came from another row.
         let focusMoved = false;
+        const flights = [];
         rows.forEach((row, index) => row._slots?.forEach(({win, cell}, at) => {
             const was = places.get(win.get_id());
             if (!was || (was.row === index && was.at === at))
                 return;
             focusMoved ||= win === focus;
             if (was.row !== index || !(arrives && index === active))
-                this._marked.fly(cell, was.box, [was.opacity, row._cellBox?.opacity ?? 255]);
+                flights.push({win, cell, was, opacity: row._cellBox?.opacity ?? 255});
         }));
+        // Two pictures that pass each other are drawn as their windows
+        // are: the one of the window that is over the other on the screen
+        // is over the other one. A picture is over the ones before it, so
+        // they start in the order of the windows from the lowest up.
+        const stack = global.display.sort_windows_by_stacking(flights.map(f => f.win));
+        flights.sort((a, b) => stack.indexOf(a.win) - stack.indexOf(b.win));
+        for (const {cell, was, opacity} of flights)
+            this._marked.fly(cell, was.box, [was.opacity, opacity]);
         const focused = focus ? cellOf(focus.get_id()) : null;
         this._marked.rowMark.moveTo(rows[active] ?? null, active, ease);
         // With no focused window among the icons, on an empty workspace for
