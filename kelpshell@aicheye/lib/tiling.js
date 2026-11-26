@@ -4009,6 +4009,11 @@ export class Tiling {
         return this._wsIds.get(ws);
     }
 
+    /** A number that a workspace keeps while it exists, whatever its index. */
+    workspaceId(ws) {
+        return this._wsId(ws);
+    }
+
     _stripWorkspace(win, monitor = win.get_monitor()) {
         const perMonitor = Meta.prefs_get_workspaces_only_on_primary() &&
             monitor !== global.display.get_primary_monitor();

@@ -357,10 +357,14 @@ const FullHeight = GObject.registerClass({
 // content. While it is under 1 the content has its own height from the top
 // of the row and is cut at the row's lower edge.
 //
-// The row of a workspace that is gone stays in the list for ROW_MS more
-// (close): it gets lower from the height it had to nothing, cut the same
-// way, and fades, so the rows under it move up to their places.
+// The row of a workspace that is gone stays in the list for a while more
+// (close). What is in it slides out past the left edge of the row over
+// ROW_SLIDE_MS, and then the row gets lower from the height it had to
+// nothing over ROW_MS, so the rows under it move up to their places. With
+// the two at once, or with the row only getting lower, a row of 28 px is
+// gone before it is seen to go.
 const ROW_MS = 200;
+const ROW_SLIDE_MS = 200;
 
 const EaseRow = GObject.registerClass({
     Properties: {
@@ -409,8 +413,8 @@ const EaseRow = GObject.registerClass({
     }
 
     /**
-     * From the height it has to nothing over ROW_MS, then it is destroyed.
-     * It takes no clicks and no drops for that time.
+     * Out to the left and then to a height of nothing, see above, then it
+     * is destroyed. It takes no clicks and no drops for that time.
      */
     close() {
         if (this._closing)
@@ -423,15 +427,21 @@ const EaseRow = GObject.registerClass({
         this.remove_transition('grow');
         this.grow = 0;
         this.clip_to_allocation = true;
-        const mode = Clutter.AnimationMode.EASE_OUT_CUBIC;
+        this.child?.ease({
+            translation_x: -this.width,
+            duration: ROW_SLIDE_MS,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
+        });
         this.ease_property('grow', 1, {
+            delay: ROW_SLIDE_MS,
             duration: ROW_MS,
-            mode,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
             onComplete: () => this.destroy(),
         });
-        this.ease({opacity: 0, duration: ROW_MS, mode});
         // With the rows that have just been built, as in growFrom().
-        holdTransitions(this, ['grow', 'opacity']);
+        if (this.child)
+            holdTransitions(this.child, ['translation-x']);
+        holdTransitions(this, ['grow']);
     }
 
     vfunc_get_preferred_height(forWidth) {
@@ -1426,9 +1436,14 @@ class Minimap {
         const attention = w => w.urgent || w.demands_attention;
         const cast = w => this._sidebar.privacy?.castOf(w) ?? null;
         const ids = wins => wins.map(w => [w.get_id(), attention(w), cast(w)]);
+        // With the workspaces themselves: after a window has gone to the
+        // next workspace and the one it left is removed, the rows show the
+        // same icons under the same numbers, and stand for other
+        // workspaces.
         const signature = JSON.stringify([
             model.map(ids), active, focus?.get_id() ?? 0,
             others.map(o => [o.monitor, ids(o.wins)]),
+            spaces.map(space => this._tiling.workspaceId(space)),
         ]);
         if (signature === this._signature)
             return;

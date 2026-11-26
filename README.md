@@ -134,7 +134,7 @@ Everything follows the style chosen in Settings > Appearance, the shell's own po
 | Four fingers up or down | Open or close the launcher |
 | Three fingers sideways over a fullscreen window | Bring the next window, or the sidebar, in over it |
 
-During a swipe, the minimap's highlights of the active workspace and of the focused window move with the fingers. Between two workspaces their rows change with them too: the icons grow and shrink, and the title line opens and closes. The icon of a window that is moved slides to its new place, and the row of a workspace that is removed closes where it is.
+During a swipe, the minimap's highlights of the active workspace and of the focused window move with the fingers. Between two workspaces their rows change with them too: the icons grow and shrink, and the title line opens and closes. The icon of a window that is moved slides to its new place, and the row of a workspace that is removed slides out of the card before the rows under it move up.
 
 Two-finger scrolling is evened out between toolkits, so GTK, Firefox, Chromium and Visual Studio Code windows scroll the same distance for the same movement.
 
