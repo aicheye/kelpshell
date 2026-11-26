@@ -378,6 +378,8 @@ class Tile {
         this.strip = null;
         this.column = null;
         this.weight = 1;         // share of the column height
+        // Where the tile was on each strip it has left, see Strip.placeOf.
+        this.places = new WeakMap();
         this.placed = false;
         this.grabbed = false;
         this._held = null;       // an edge is dragged with the pointer, see holdResize
@@ -1751,6 +1753,53 @@ class Strip {
         tile.strip = this;
         tile.column = col;
         tile.weight = 1;
+    }
+
+    /**
+     * Where a tile is on this strip, for restore(): the index of its
+     * column, the tiles above and below it, and the tiles of the columns
+     * on either side.
+     */
+    placeOf(tile) {
+        const col = tile.column;
+        const index = this.columns.indexOf(col);
+        const row = col.tiles.indexOf(tile);
+        return {
+            index,
+            weight: tile.weight,
+            above: col.tiles[row - 1] ?? null,
+            below: col.tiles[row + 1] ?? null,
+            before: [...this.columns[index - 1]?.tiles ?? []],
+            after: [...this.columns[index + 1]?.tiles ?? []],
+        };
+    }
+
+    /**
+     * Put a tile that is on no strip where placeOf() found it. The strip
+     * may have changed since: the tile goes under the one that was above
+     * it or over the one that was below it, if either is still here. Else
+     * it is a column of its own, right of a tile that was in the column
+     * before it, or left of one that was in the column after it, or at
+     * the index it had.
+     */
+    restore(tile, place, proportion = null) {
+        const here = t => t?.strip === this && t.column !== null;
+        const mate = [place.above, place.below].find(here);
+        if (mate) {
+            const col = mate.column;
+            const row = col.tiles.indexOf(mate);
+            this.addToColumn(tile, col, mate === place.above ? row + 1 : row);
+            tile.weight = place.weight;
+            return;
+        }
+        const before = place.before.find(here);
+        const after = place.after.find(here);
+        let index = place.index;
+        if (before)
+            index = this.columns.indexOf(before.column) + 1;
+        else if (after)
+            index = this.columns.indexOf(after.column);
+        this.addColumn(tile, index, proportion);
     }
 
     remove(tile) {
@@ -5289,6 +5338,8 @@ export class Tiling {
             return;
         const old = tile.strip;
         const proportion = tile.column?.proportion ?? null;
+        if (old?.columns.includes(tile.column))
+            tile.places.set(old, old.placeOf(tile));
         old?.remove(tile);
         // To another workspace of the same monitor, the window glides from
         // where it is drawn to its new place while the workspaces slide. On
@@ -5296,10 +5347,20 @@ export class Tiling {
         if (old?.monitor !== strip.monitor)
             tile.placed = false;
         tile._request = null;
-        strip.addColumn(tile, null, proportion);
+        // Back on a workspace it has been on, it takes the place it had
+        // there. On one it has not been on it goes right of the column
+        // that had the focus there. A window sent down and up again went
+        // to the end of the strip it came from: that strip has no focus
+        // once its focused window has left.
+        const place = old?.monitor === strip.monitor ? tile.places.get(strip) : null;
+        if (place)
+            strip.restore(tile, place, proportion);
+        else
+            strip.addColumn(tile, null, proportion);
         if (win.has_focus()) {
             // Focus does not change when a focused window moves, so no focus
             // event will make the new strip follow it.
+            tile.column.active = tile;
             strip.focus = tile;
             strip.ensureVisible(tile.column);
         }
