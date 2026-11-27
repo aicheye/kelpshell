@@ -43,15 +43,17 @@
     "enabled": true,
     "width": 2,
     "radius": 15,            // corner radius of the windows it surrounds
-    "color": "rgba(255,255,255,0.55)"
+    "color": "rgba(255,255,255,0.55)",
+    "colorLight": "rgba(0,0,0,0.4)"   // the same in the light style
   },
 
   "windows": {
     "clipCorners": true,     // cut every window's corners to focusRing.radius, so the ring
                              // fits all of them. This also removes the shadow a window
                              // draws around itself
-    "outline": true,         // a one pixel light outline on every window, so a window
-                             // with dark content has an edge on a dark wallpaper
+    "outline": true,         // a one pixel outline on every window, light in the dark style
+                             // and dark in the light one, so a window has an edge on
+                             // a wallpaper or a window of its own colour
     "unfocusedScale": 0.98,  // a tiled window without focus is drawn this much smaller, in
                              // place. 1 turns it off
     // A Chromium app on Wayland draws its own blue title bar and border,

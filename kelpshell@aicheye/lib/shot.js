@@ -42,6 +42,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {holdInPlace} from './castplace.js';
+import {ringColor} from './config.js';
 import {visibleRect} from './crop.js';
 import {cornerPicture, piece} from './privacy.js';
 import {WindowRecorder} from './windowrec.js';
@@ -76,7 +77,7 @@ class KelpShotRing extends Clutter.Actor {
         super._init();
         const ring = config.values.focusRing;
         const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        const [ok, color] = Cogl.Color.from_string(ring.color);
+        const [ok, color] = Cogl.Color.from_string(ringColor(config));
         this._color = ok ? color : new Cogl.Color({red: 255, green: 255, blue: 255, alpha: 140});
         if (!line)
             this._color = new Cogl.Color({red: 0, green: 0, blue: 0, alpha: 0});
@@ -595,7 +596,9 @@ export class Shot {
         this._placeCards();
         const chosen = this._holes[this._front].entry;
         const ring = this._chosenRing;
-        ring.visible = !!chosen?.rect;
+        // No ring on a fullscreen window, as it has none with the focus:
+        // the ring is outside the window, on the next monitor.
+        ring.visible = !!chosen?.rect && !chosen.win.is_fullscreen();
         if (ring.visible) {
             ring.radii = chosen.radii;
             ring.set_position(chosen.rect.x - ring.reach, chosen.rect.y - ring.reach);
@@ -627,6 +630,7 @@ export class Shot {
             this._hover.set_position(pointed.rect.x, pointed.rect.y);
             this._hover.set_size(pointed.rect.width, pointed.rect.height);
             this._hoverRing.radii = pointed.radii;
+            this._hoverRing.visible = !pointed.win.is_fullscreen();
         }
     }
 

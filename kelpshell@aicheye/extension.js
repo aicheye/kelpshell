@@ -209,7 +209,14 @@ export default class Kelpshell extends Extension {
         this.tiling.enable();
         // The colour windows are darkened towards under the sidebar follows
         // the style, which the backdrop reports.
-        this.backdrop.onChanged(() => this.tiling?.fade?.sync());
+        this.backdrop.onChanged(() => {
+            this.tiling?.fade?.sync();
+            // The ring and the outline of the windows have a colour for
+            // each style.
+            this.tiling?.ring?.restyle();
+            this.tiling?.corners?.syncAll();
+            this.shot?.sync();
+        });
         this.decorations.onChanged(() => this._syncFrames());
 
         this.launcher = new Launcher(this);

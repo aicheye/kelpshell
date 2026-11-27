@@ -27,6 +27,7 @@ import * as WorkspaceAnimation from 'resource:///org/gnome/shell/ui/workspaceAni
 
 import {CAST_PLACE} from './castplace.js';
 import {Spring, rubberBand} from './spring.js';
+import {ringColor} from './config.js';
 import {Corners, surfaceOf} from './corners.js';
 import {EdgeFade} from './edgefade.js';
 import {decorateSwitch} from './wsslide.js';
@@ -3449,8 +3450,8 @@ class FocusRing {
         const c = this.wm.config.values.focusRing;
         // The ring is drawn outside the window, so its inner edge follows the
         // window's corner when its outer radius is that radius plus its width.
-        this.actor.style =
-            `border: ${c.width}px solid ${c.color}; border-radius: ${c.radius + c.width}px;`;
+        this.actor.style = `border: ${c.width}px solid ${ringColor(this.wm.config)}; ` +
+            `border-radius: ${c.radius + c.width}px;`;
     }
 
     /** fade: the ring fades in on a window it was not on. */
@@ -4739,6 +4740,16 @@ export class Tiling {
      */
     drawnRect(win) {
         const tile = this.tiles.get(win);
+        // A fullscreen tile is drawn at its frame, which is its monitor,
+        // and not at the place its column has (Tile.sync).
+        if (tile?.fullscreen) {
+            const frame = win.get_frame_rect();
+            return {
+                x: frame.x + Math.round(tile.nudge.value),
+                y: frame.y + Math.round(tile.nudgeY.value),
+                width: frame.width, height: frame.height,
+            };
+        }
         if (tile?.target && !tile.grabbed)
             return tile.drawn();
         // A window on no strip that a key is moving has a Floater.

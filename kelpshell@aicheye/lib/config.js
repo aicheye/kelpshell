@@ -6,6 +6,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
 export const DEFAULTS = {
     sidebar: {
         width: 164,           // px, expanded card width
@@ -40,10 +42,11 @@ export const DEFAULTS = {
         width: 2,
         radius: 15,       // corner radius of the windows the ring surrounds
         color: 'rgba(255,255,255,0.55)',
+        colorLight: 'rgba(0,0,0,0.4)',   // the same in the light style
     },
     windows: {
         clipCorners: true,    // cut every window's corners to focusRing.radius
-        outline: true,        // a one pixel outline on every window
+        outline: true,        // a one pixel outline on every window, light in the dark style and dark in the light one
         unfocusedScale: 0.98, // a tiled window without focus is drawn this much smaller; 1 turns it off
         // Wayland windows whose frame the shell replaces, by wm_class
         // substring. top, right, bottom, left: the thickness in px of the
@@ -175,6 +178,25 @@ export const DEFAULTS = {
 };
 
 /** Remove // and block comments and trailing commas, leaving strings intact. */
+/**
+ * True while the light style is on. lib/tweaks.js makes the shell follow the
+ * "color-scheme" setting in both directions, and the shell then loads
+ * stylesheet-light.css in place of stylesheet-dark.css.
+ */
+export function isLight() {
+    return Main.getStyleVariant() === 'light';
+}
+
+/**
+ * The colour of the focus ring in the current style, as CSS. In the light
+ * style it is dark: the white one cannot be told from a white window that
+ * lies on another white window.
+ */
+export function ringColor(config) {
+    const ring = config.values.focusRing;
+    return isLight() ? ring.colorLight : ring.color;
+}
+
 export function stripJsonc(text) {
     let out = '';
     let i = 0;

@@ -35,12 +35,17 @@ import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 
+import {isLight} from './config.js';
 import {cropOf, drawnFrame, isCropped} from './crop.js';
 
 const EFFECT = 'kelp-corners';
 // The outline, as a premultiplied colour: white at 16%, mixed into whatever
 // the window shows at its edge.
 const OUTLINE = [0.16, 0.16, 0.16, 0.16];
+// In the light style it is black at 22%. The white one is not there on a
+// white window, and a white window that lies on another white window, or
+// beside one, has no edge to see.
+const OUTLINE_LIGHT = [0, 0, 0, 0.22];
 // The outline of a window with a drawn title bar (lib/titlebar.js) is one
 // opaque colour instead, and the bar's border has the same one: 16% white
 // over the bar's #2e2e32. Mixed into the content, the line would be 51 on
@@ -466,7 +471,7 @@ export class Corners {
         if (bar)
             line = BAR_LINE;
         else if (outlined)
-            line = OUTLINE;
+            line = isLight() ? OUTLINE_LIGHT : OUTLINE;
         effect.setShape(
             [x + crop.left, y + crop.top - (bar ? crop.bar : 0),
                 x + frame.width - crop.right, y + frame.height - crop.bottom],

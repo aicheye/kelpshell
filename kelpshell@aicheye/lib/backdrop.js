@@ -37,6 +37,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {isLight} from './config.js';
 import {Glass, HAVE_GLASS} from './glass.js';
 
 const BASE_DIVISOR = 4;   // the stored image is 1/4 of the monitor size
@@ -429,15 +430,6 @@ class KelpShadowBin extends St.Widget {
 function parseColor(hex, fallback) {
     const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
     return m ? parseInt(m[1], 16) : fallback;
-}
-
-/**
- * True while the light style is on. lib/tweaks.js makes the shell follow the
- * "color-scheme" setting in both directions, and the shell then loads
- * stylesheet-light.css in place of stylesheet-dark.css.
- */
-export function isLight() {
-    return Main.getStyleVariant() === 'light';
 }
 
 /** The tint of the current style, as 0xrrggbb. */
