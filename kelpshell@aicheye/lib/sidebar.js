@@ -4609,7 +4609,7 @@ export class Sidebar {
         if (this._widening)
             this.tiling.glideEnd?.();
         this._widening = null;
-        this.tiling.fade?.limit(null);
+        this.tiling.fade?.follow(null);
         Main.layoutManager.removeChrome(this._strut);
         if (this._roomId)
             global.compositor.get_laters().remove(this._roomId);
@@ -4813,19 +4813,24 @@ export class Sidebar {
                 done: () => {
                     this.actor.setEdge(edgeFor(width));
                     this.tiling.glideEnd();
-                    fade?.limit(null);
+                    fade?.follow(null);
                 },
             };
             afterSettle(this.actor, () => {
                 if (this._widening !== a)
                     return;
-                fade?.limit(Math.min(this._strutWidth, width));
+                // The darkening and the blur under the cards go with them,
+                // between the width the sidebar had and the one it gets.
+                fade?.follow(this.actor.width, [
+                    Math.min(this._strutWidth, width), Math.max(this._strutWidth, width),
+                ]);
                 this.tiling.glideBegin(() => {
                     this._strutWidth = width;
                     this._placeStrut(true);
                 });
                 a.step = share => {
                     this.actor.setEdge(edgeFor(this.actor.width));
+                    fade?.follow(this.actor.width);
                     this.tiling.glideStep(share);
                 };
                 animator.add(this._widthItem);
@@ -4835,7 +4840,7 @@ export class Sidebar {
             this._strutWidth = width;
             this._placeStrut();
             this.actor.setEdge(edgeFor(width));
-            fade?.limit(null);
+            fade?.follow(null);
             if (stopped)
                 this.tiling.glideEnd();
         }

@@ -53,6 +53,15 @@
 // only the pictures with a blur of a seventh of the width or less are drawn
 // (3 and 6 px at 68 px).
 //
+// While the sidebar collapses or expands, the darkening and the blur go
+// with the cards, frame by frame (follow()): they are across the room the
+// cards take now, and the windows leave that room or come into it at the
+// same pace. The darkening is the one of that width. The blur is between
+// what it is under the narrow sidebar and under the wide one, as far along
+// as the cards are: each picture comes in across a part of the width that
+// goes from its part there to its part here, and a picture the narrow
+// sidebar does not show grows from nothing at the edge of the monitor.
+//
 // Where the shader that darkens the windows cannot be made (lib/corners.js
 // needs Cogl snippets and their uniforms in JavaScript), the windows fade
 // into the wallpaper instead: the wallpaper is drawn over them, opaque at
@@ -131,7 +140,8 @@ export class EdgeFade {
         this._wm = wm;
         this._signature = '';
         this._band = null;       // {monitor, x, y, width, height}
-        this._limit = null;      // px, see limit()
+        this._room = null;       // px, see follow()
+        this._ends = null;       // [px, px], see follow()
     }
 
     enable() {
@@ -215,19 +225,22 @@ export class EdgeFade {
     }
 
     /**
-     * While the sidebar changes its width, the band is no wider than the
-     * narrower of the two widths the sidebar takes of the monitor, px:
-     * the windows are in the rest of the wider one while they move. null
-     * when the sidebar has its width.
+     * The sidebar is changing its width and takes px of the monitor now,
+     * on its way between the two widths of ends, [narrower, wider]: the
+     * windows are darkened and blurred across px. ends can be left out
+     * after the first call. null when the sidebar has its width.
      *
-     * The work area has the new width from the first frame. With the band
-     * as wide as that at once, the windows that still leave the room of a
-     * sidebar that widens would be blurred and darkened on the way.
+     * The work area has the new width from the first frame, and the cards
+     * and the windows take 240 ms to get there. Taken from the work area,
+     * the darkening and the blur would change in that one frame: the
+     * windows that still leave the room of a sidebar that widens would be
+     * blurred and darkened on the way.
      */
-    limit(px) {
-        if (px === this._limit)
+    follow(px, ends = null) {
+        if (px === this._room)
             return;
-        this._limit = px;
+        this._room = px;
+        this._ends = px === null ? null : ends ?? this._ends;
         this.sync();
     }
 
@@ -250,7 +263,12 @@ export class EdgeFade {
             const area = ws.get_work_area_for_monitor(index);
             const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
             const gap = this._wm.config.values.layout.gap * scale;
-            const room = Math.min(area.x - monitor.x, this._limit ?? Infinity);
+            let room = area.x - monitor.x;
+            // The wallpaper drawn over the windows has a transition of its
+            // own below. It keeps to the narrower width until the sidebar
+            // has its width.
+            if (this._room !== null)
+                room = HAVE_GLASS ? this._room : Math.min(room, this._ends?.[0] ?? room);
             const width = room + gap;
             // Only where something (the sidebar) reserves the left edge.
             if (room > 0 && width > 0) {
@@ -260,6 +278,10 @@ export class EdgeFade {
                     width, height: monitor.height,
                     ramp: width,
                     full: [monitor.width, monitor.height],
+                    // The widths of the band at the two ends of the
+                    // sidebar's way, see follow().
+                    ends: this._room !== null && this._ends
+                        ? this._ends.map(px => px + gap) : null,
                 };
             }
         }
@@ -286,8 +308,16 @@ export class EdgeFade {
         if (shadeKey !== this._shadeKey) {
             this._shadeKey = shadeKey;
             setShade(shade);
-            // The tiling makes the corners after this object.
-            this._wm.corners?.syncAll();
+            if (this._room !== null) {
+                // The shader reads the shade at every paint, so the windows
+                // are only painted again, and their clones in the blurred
+                // pictures with them. The corners are as they were.
+                for (const actor of global.get_window_actors())
+                    actor.queue_redraw();
+            } else {
+                // The tiling makes the corners after this object.
+                this._wm.corners?.syncAll();
+            }
         }
         this._syncFrost(live ? band : null, rampAt);
         if (HAVE_GLASS)
@@ -372,44 +402,76 @@ export class EdgeFade {
         const glass = this._wm.glass;
         if (!glass)
             place = null;
-        // The sharpest picture in any case.
-        const levels = place && LEVELS.filter((level, i) => i === 0 ||
-            blurSigma(level, place.full[0]) <= place.width * BLUR_SHARE);
-        const key = JSON.stringify(place &&
-            [place.x, place.y, place.width, place.height, rampAt, levels]);
+        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        // What is drawn across a band of this width at rest: the pictures,
+        // the sharpest first and in any case, the width they are drawn
+        // across, and for each the x it starts to come in at and the x it
+        // is whole from, towards the edge of the monitor. Each comes in
+        // over one share of the width between where the work area starts
+        // and rampAt, over the one before it, so the blur doubles from one
+        // share to the next.
+        const rest = width => {
+            const levels = LEVELS.filter((level, i) => i === 0 ||
+                blurSigma(level, place.full[0]) <= width * BLUR_SHARE);
+            const across = Math.max(1, width - EDGE * scale);
+            const span = across * (1 - rampAt) / levels.length;
+            return {
+                levels, across,
+                fades: levels.map((_level, i) => [across - span * i, across - span * (i + 1)]),
+            };
+        };
+        let look = null;
+        let area = null;
+        if (place) {
+            look = rest(place.width);
+            area = {x: place.x, y: place.y, width: place.width, height: place.height};
+        }
+        if (place?.ends) {
+            // On the way between two widths, see follow(). The pictures of
+            // the narrow band are the first of those of the wide one.
+            const [narrow, wide] = place.ends.map(rest);
+            const way = place.ends[1] - place.ends[0];
+            const t = way > 0
+                ? Math.max(0, Math.min(1, (place.width - place.ends[0]) / way)) : 1;
+            look = {
+                levels: wide.levels,
+                across: look.across,
+                fades: wide.fades.map((to, i) => {
+                    const from = narrow.fades[i] ?? [0, 0];
+                    return [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
+                }),
+            };
+            // The sharper pictures are made for the wide band all the way:
+            // they are made again when their area changes.
+            area.width = place.ends[1];
+        }
+        const key = JSON.stringify(place && [place.x, place.y, place.height, look, area]);
         if (key === this._frostKey)
             return;
         this._frostKey = key;
-        glass?.setFineArea(place &&
-            {x: place.x, y: place.y, width: place.width, height: place.height});
+        glass?.setFineArea(area);
         if (!place) {
             this.frost.hide();
             return;
         }
         // The windows as they are: no tint, and the darkening is in them
         // already. The sharpest picture lies lowest.
-        if (this._levels !== levels.join()) {
-            this._levels = levels.join();
+        if (this._levels !== look.levels.join()) {
+            this._levels = look.levels.join();
             this.frost.destroy_all_children();
-            this._layers = levels.map(level => {
+            this._layers = look.levels.map(level => {
                 const layer = glass.createLayer([[0, 0, 0], 0, 1], level);
                 this.frost.add_child(layer);
                 return layer;
             });
         }
-        // Each picture comes in over one share of the width between where
-        // the work area starts and rampAt, over the one before it, so the
-        // blur doubles from one share to the next.
-        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        const width = Math.max(1, place.width - EDGE * scale);
-        const span = width * (1 - rampAt) / this._layers.length;
         this._layers.forEach((layer, i) => {
-            const from = width - span * i;
-            layer.set_size(Math.ceil(from), place.height);
-            layer.setFade(from, from - span);
+            const [from, to] = look.fades[i];
+            layer.set_size(Math.max(1, Math.ceil(from)), place.height);
+            layer.setFade(from, to);
         });
         this.frost.set_position(place.x, place.y);
-        this.frost.set_size(width, place.height);
+        this.frost.set_size(look.across, place.height);
         this.frost.show();
         // The layers have moved with the actor they are in.
         glass.moved();
