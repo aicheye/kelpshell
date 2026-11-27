@@ -1724,8 +1724,12 @@ class Strip {
      * height} on the stage. The index counts the columns without the
      * tile's own column when the tile is alone in it, as addColumn() does
      * after the tile is taken out. The strip is left as it was.
+     *
+     * places, if given, is a Map that takes the x the other tiles have
+     * then, for those that are somewhere else now. None on a strip that
+     * does not scroll: there the other columns change their widths.
      */
-    placeAsColumn(tile, index, proportion = null) {
+    placeAsColumn(tile, index, proportion = null, places = null) {
         const columns = this.columns;
         const own = tile.strip === this ? tile.column : null;
         const col = new Column(proportion ?? this.wm.config.values.layout.defaultWidth);
@@ -1737,8 +1741,17 @@ class Strip {
             const {area, gap, viewW} = this._measure();
             const scroll = Math.round(this._scrollTo(col, viewW, this.scroll));
             const shift = this._shiftFor(col, scroll, viewW);
+            const left = area.x - shift + gap - scroll;
+            if (places && !this.fits) {
+                for (const c of next) {
+                    for (const t of c.tiles) {
+                        if (t !== tile && t.target && !t.fullscreen && t.target.x !== left + c.x)
+                            places.set(t, left + c.x);
+                    }
+                }
+            }
             return {
-                x: area.x - shift + gap + col.x - scroll,
+                x: left + col.x,
                 y: area.y + gap,
                 width: col.width,
                 height: Math.max(40, area.height - 2 * gap),
@@ -2650,7 +2663,7 @@ class Strip {
             return {kind: 'none', dir};
         const scroll = this._scrollTo(next, s.viewW, s.base);
         // The window of the next column is over the fullscreen one already.
-        const shown = !back && focus !== cover && !this._under(tile, cover);
+        const shown = !back && focus !== cover && !this.under(tile, cover);
 
         if (back || shown) {
             const towards = Math.sign(this.columns.indexOf(cover.column) - at) === dir;
@@ -2669,7 +2682,7 @@ class Strip {
                 .filter((_col, i) => i === at || Math.sign(i - at) === leave)
                 .flatMap(col => col.tiles)
                 .filter(t => t.target && !t.fullscreen &&
-                    (t.column === focus.column || !this._under(t, cover)));
+                    (t.column === focus.column || !this.under(t, cover)));
             // From where each is drawn now, so a swipe that begins while a
             // window still settles does not move it at once.
             const items = tiles.map(t => ({tile: t, from: t.x.value}));
@@ -2729,7 +2742,7 @@ class Strip {
         const by = s.base - scroll + this._shift - this._shiftFor(col, scroll, s.viewW);
         return this.tiles
             .filter(t => t.target && !t.fullscreen && !moved.includes(t) &&
-                !this._under(t, s.cover))
+                !this.under(t, s.cover))
             .map(t => ({tile: t, from: t.x.value, to: t.target.x + by}));
     }
 
@@ -3210,7 +3223,7 @@ class Strip {
         const tiles = this.columns
             .filter((_col, i) => Math.sign(i - at) === leave)
             .flatMap(col => col.tiles)
-            .filter(t => t.target && !t.fullscreen && !this._under(t, cover));
+            .filter(t => t.target && !t.fullscreen && !this.under(t, cover));
         if (leave < 0)
             tiles.reverse();
         if (tiles.length === 0)
@@ -3244,7 +3257,7 @@ class Strip {
         if (!cover || this.focus !== cover || this._swipe || !this.wm.animator.enabled)
             return false;
         const over = this.tiles.filter(t => t !== cover && !t.fullscreen && t.target &&
-            !t.dead && !this._under(t, cover));
+            !t.dead && !this.under(t, cover));
         if (over.length === 0)
             return false;
         this._settle?.finish();
@@ -3353,7 +3366,7 @@ class Strip {
         // The nearest to the fullscreen window came in first.
         const over = this.tiles
             .filter(t => t !== cover && !t.fullscreen && t.target && !t.dead &&
-                !this._under(t, cover))
+                !this.under(t, cover))
             .sort((a, b) => away(a) - away(b));
         if (over.length === 0 && this.focus === cover)
             return;
@@ -3397,8 +3410,74 @@ class Strip {
         }
     }
 
+    /**
+     * A window was dropped beside the fullscreen one, or into a column
+     * there. The windows over the fullscreen one on the other side of it
+     * leave the way they came and go under it again, as they do before a
+     * swipe brings a window in from that side.
+     *
+     * The strip has one scroll, and it puts the column in focus against its
+     * edge of the monitor. A window on the other side would be drawn where
+     * that scroll leaves it: out of view but for a part of it at the edge.
+     */
+    coverOneSide(tile) {
+        const cover = this.cover;
+        if (!cover || tile === cover || tile.strip !== this || this._swipe)
+            return;
+        const at = this.columns.indexOf(cover.column);
+        const sideOf = t => Math.sign(this.columns.indexOf(t.column) - at);
+        const side = sideOf(tile);
+        const others = this.tiles.filter(t => t !== cover && !t.fullscreen && t.target &&
+            !t.dead && side && sideOf(t) === -side && !this.under(t, cover));
+        if (others.length === 0)
+            return;
+        const moving = this.wm.animator.enabled;
+        const under = () => {
+            if (moving)
+                global.compositor.enable_unredirect();
+            for (const t of others) {
+                if (t.dead || t.strip !== this || cover.dead || this.focus === t)
+                    continue;
+                t.cameFrom = null;
+                // As in _coverLeave(): the compositor follows the stack of
+                // the windows a frame later, so the actor is put there too.
+                t.win.lower();
+                const group = t.actor?.get_parent();
+                if (group && cover.actor?.get_parent() === group)
+                    group.set_child_below_sibling(t.actor, cover.actor);
+                if (t.target)
+                    t.x.set(t.target.x);
+                t.sync();
+            }
+        };
+        // Windows that are on their way from a swipe arrive now.
+        this._settle?.finish();
+        if (moving) {
+            global.compositor.disable_unredirect();
+            this._coverSendOut(cover, others, under);
+        } else {
+            under();
+        }
+    }
+
+    /**
+     * Whether a tile is on its way out from over the fullscreen window, to
+     * go under it when it is out: after a swipe, a focus key, or a click on
+     * a window that came in before it.
+     */
+    leaving(tile) {
+        const item = this._settle;
+        if (!item?.tiles.includes(tile))
+            return false;
+        // No plan: every tile leaves (_coverSendOut). An 'in' plan here is
+        // a swipe in that did not count: its window goes back out, and the
+        // others return to their places.
+        const plan = item.flight?.plan;
+        return !plan || plan.kind === 'out' || plan.tile === tile;
+    }
+
     /** Whether a tile's window is drawn under the fullscreen window. */
-    _under(tile, cover) {
+    under(tile, cover) {
         const group = tile.actor?.get_parent();
         if (!group || cover.actor?.get_parent() !== group)
             return false;
@@ -5797,6 +5876,7 @@ export class Tiling {
                 // A keyboard move leaves the pointer wherever it was.
                 pointer: op !== Meta.GrabOp.KEYBOARD_MOVING,
                 sunk: false, icon: null,
+                places: new Map(),      // the windows drawn out of their places, see _showPlaces
             };
             win.connectObject('position-changed', () => this._onDragMotion(), this.dropHint);
         } else {
@@ -5815,6 +5895,7 @@ export class Tiling {
         if (!drag)
             return;
         drag.tile.win.disconnectObject(this.dropHint);
+        this._showPlaces(drag, null);
         drag.icon?.destroy();
         drag.icon = null;
         const actor = drag.tile.actor;
@@ -5884,6 +5965,7 @@ export class Tiling {
         const sunk = drag.pointer && (this.dragSink?.over(tile.win, px, py) ?? false);
         this._setSunk(drag, sunk);
         if (sunk) {
+            this._showPlaces(drag, null);
             this.dropHint.hide();
             const [w, h] = drag.icon.get_size();
             drag.icon.set_position(Math.round(px - w / 2), Math.round(py - h / 2));
@@ -5891,10 +5973,39 @@ export class Tiling {
         }
         const strip = this._dropStrip(tile, px, py, drag.pointer);
         const target = strip ? this._dropTarget(tile, strip, px, py) : null;
+        this._showPlaces(drag, target?.places ?? null);
         if (target?.rect)
             this.dropHint.show(target.rect, tile.actor);
         else
             this.dropHint.hide();
+    }
+
+    /**
+     * Draw the other windows where they are once the dragged one is dropped
+     * (places: tile -> x), or back at their own places (null). A window
+     * that the drop place lies over moves out of it, which shows where the
+     * dragged window goes and where that window goes.
+     *
+     * Only the springs move. The layout and the frames stay, so the next
+     * motion finds the same drop places, and a drag that ends anywhere else
+     * leaves nothing to undo but the springs.
+     */
+    _showPlaces(drag, places) {
+        for (const tile of new Set([...drag.places.keys(), ...places?.keys() ?? []])) {
+            if (tile.dead || !tile.target || tile.grabbed || tile.fullscreen)
+                continue;
+            const x = places?.get(tile) ?? tile.target.x;
+            if (tile.x.target === x)
+                continue;
+            if (this.animator.enabled) {
+                tile.x.target = x;
+                this.animator.add(tile);
+            } else {
+                tile.x.set(x);
+                tile.sync();
+            }
+        }
+        drag.places = places ?? new Map();
     }
 
     /**
@@ -5930,10 +6041,16 @@ export class Tiling {
      * Where a dragged tile lands when dropped with the pointer at px, py.
      *
      * Returns {column, row, rect} to join a column at a row, or
-     * {index, rect} to become a column at an index. The index counts the
-     * strip's columns without the dragged window's own column when the
-     * window is alone in it, which is how the strip is once the window is
-     * taken out. rect is the place to show.
+     * {index, rect, places} to become a column at an index. The index
+     * counts the strip's columns without the dragged window's own column
+     * when the window is alone in it, which is how the strip is once the
+     * window is taken out. rect is the place to show. places, where rect is
+     * a whole place, has the x of each other window that is somewhere else
+     * once the window is dropped, see _showPlaces.
+     *
+     * The places are read from the layout (Tile.target) and not from where
+     * the windows are drawn, so a window that _showPlaces has moved out of
+     * the way keeps the drop places it had.
      */
     _dropTarget(tile, strip, px, py) {
         const area = strip.area;
@@ -5941,12 +6058,23 @@ export class Tiling {
         const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
         const own = tile.strip === strip ? tile.column : null;
         const alone = own?.tiles.length === 1;
-        // The columns as they are drawn, without the dragged window.
+        const cover = strip.fits ? null : strip.cover;
+        const over = cover && cover !== tile ? cover : null;
+        // The columns as they are drawn, without the dragged window. Over a
+        // fullscreen window, the columns that have a window over it: the
+        // others are not in view, and neither is the place a window would
+        // take in the fullscreen window's own column. A window that is on
+        // its way under the fullscreen window counts as under it. A press
+        // on a window sends out those that came in after it.
+        const inView = t => !t.fullscreen && !strip.under(t, over) && !strip.leaving(t);
         const cols = [];
         for (const column of strip.columns) {
             const tiles = column.tiles.filter(t => t !== tile && t.target);
-            if (tiles.length > 0)
-                cols.push({column, tiles, x: tiles[0].target.x, width: column.width});
+            if (tiles.length === 0)
+                continue;
+            if (over && (column === over.column || !tiles.some(inView)))
+                continue;
+            cols.push({column, tiles, x: tiles[0].target.x, width: column.width});
         }
 
         for (const c of cols) {
@@ -5965,6 +6093,38 @@ export class Tiling {
             return {column: c.column, row, rect: {x: c.x, y, width: c.width, height}};
         }
 
+        if (over) {
+            // Beside the fullscreen window there are two places: against
+            // the left edge of the monitor and against the right edge, at
+            // the width the window has. The half of the monitor the pointer
+            // is on says which. The window goes past the windows that are
+            // over the fullscreen one on that side, so it is the one at the
+            // edge, as a window that a swipe brings in is.
+            const list = strip.columns.filter(c => c !== own || !alone);
+            const at = list.indexOf(over.column);
+            const mon = strip.monitorRect;
+            const side = px < mon.x + mon.width / 2 ? -1 : 1;
+            const shown = cols.map(c => list.indexOf(c.column))
+                .filter(i => Math.sign(i - at) === side);
+            const index = side < 0 ? Math.min(at, ...shown) : Math.max(at, ...shown) + 1;
+            const places = new Map();
+            const rect = strip.placeAsColumn(tile, index, tile.column?.proportion, places);
+            // Only the windows that are in view move out of the way.
+            for (const t of [...places.keys()]) {
+                if (!inView(t))
+                    places.delete(t);
+            }
+            // The windows over the fullscreen one on the other side leave
+            // when the window is dropped here, see Strip.coverOneSide.
+            for (const c of cols) {
+                if (Math.sign(list.indexOf(c.column) - at) !== -side)
+                    continue;
+                for (const t of c.tiles.filter(inView))
+                    places.set(t, side > 0 ? mon.x - t.target.width : mon.x + mon.width);
+            }
+            return {index, rect, places};
+        }
+
         const index = cols.filter(c => c.x + c.width / 2 < px).length;
         // Back where it came from: show the place it left.
         if (alone && tile.target && index === strip.columns.indexOf(own)) {
@@ -5976,8 +6136,11 @@ export class Tiling {
         // Before the first column, after the last one, or on a strip with
         // no other window: the place it has once it is dropped, at the
         // width it keeps.
-        if (!prev || !next)
-            return {index, rect: strip.placeAsColumn(tile, index, tile.column?.proportion)};
+        if (!prev || !next) {
+            const places = new Map();
+            const rect = strip.placeAsColumn(tile, index, tile.column?.proportion, places);
+            return {index, rect, places};
+        }
         // Between two columns: a bar in the gap they move apart from.
         const width = DROP_BAR_WIDTH * s;
         const mid = (prev.x + prev.width + next.x) / 2;
@@ -6002,6 +6165,10 @@ export class Tiling {
         this._drag = null;
         win.disconnectObject(this.dropHint);
         this.dropHint.hide();
+        // The layout below gives every window its place. This is for a
+        // drag that ends without one.
+        if (drag)
+            this._showPlaces(drag, null);
         if (win.get_maximize_flags() !== Meta.MaximizeFlags.NONE) {
             this._onMaximized(win);
             return;
@@ -6044,6 +6211,8 @@ export class Tiling {
             }
             for (const s of this.strips.values())
                 s.layout(true);
+            if (target)
+                strip.coverOneSide(tile);
         } else {
             // Resize: keep the new width, and the new share of the height.
             // Of the frame a dragged edge asked for last, which the client
