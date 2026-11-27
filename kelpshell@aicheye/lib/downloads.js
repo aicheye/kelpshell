@@ -34,6 +34,15 @@
 // finished download, which sets that time, and some keep the modification
 // time the server reported.
 //
+// The pile is shown with the cards. After a lock the sidebar is built again,
+// and the new pile gets the files the one before it knew (DownloadsCard.state)
+// and their decoded pictures, which lib/picture.js keeps: reading the folder
+// and decoding the pictures takes 190 to 260 ms with 300 files (measured),
+// and the pile would come up that long after the other cards. After a login
+// there is nothing to take over, so the pile fades and grows in when the
+// folder has been read, and each picture fades in when it is decoded. A pile
+// whose last file is gone fades out the same way.
+//
 // A picture is shown as itself (lib/picture.js). Any other file shows its
 // thumbnail from the thumbnail cache the file manager uses, or else the icon
 // of its type. A file that has no thumbnail there gets one made, by the
@@ -118,6 +127,9 @@ const FAN_MS = 220;
 const ARRIVE_MS = 320;
 const HOP_UP_MS = 170;
 const HOP_DOWN_MS = 380;
+const SHOW_MS = 200;        // the pile fades in or out
+const SHOW_SCALE = 0.85;    // the size it grows from and shrinks to
+const PICTURE_MS = 150;     // a picture that had to be decoded fades in
 const TIP_MS = 100;
 const TIP_GAP = 6;          // px between a file of the pile and its name
 const RESCAN_MS = 400;      // after the folder last changed
@@ -156,7 +168,16 @@ function iconOf(item, size, styleClass) {
         key: `${file.get_uri()} ${item.time} ${item.info.get_size()}`,
         file, width: px, height: px, hug: true,
         fallback: actor => actor.add_child(typeIcon()),
-        loaded: framed,
+        // Its place was empty until now, so it fades in with its line.
+        loaded: () => {
+            framed();
+            frame.opacity = 0;
+            easeSettled(frame, {
+                opacity: 255,
+                duration: PICTURE_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        },
     });
     frame.child = shown;
     // A picture that was kept is shown at once, and `loaded` is not called.
@@ -219,6 +240,9 @@ class KelpPile extends St.Widget {
         this._spread = false;
         this._buttons = [];   // the files, newest first, then the folder if it is there
         this._hovered = null;
+        this._leaving = false;   // fading out with the files it had, see leave()
+        // The files are in the middle of the pile's box.
+        this.set_pivot_point(0.5, 0.5);
         // For each file of the spread pile, from the newest: {x, y, angle}
         // on top of its place and its angle. Drawn again at every spread.
         this._jitter = Array.from({length: PILE}, () => ({x: 0, y: 0, angle: 0}));
@@ -243,6 +267,59 @@ class KelpPile extends St.Widget {
 
     get spread() {
         return this._spread;
+    }
+
+    /** The pile fades out, see leave(). Its files take no pointer then. */
+    get leaving() {
+        return this._leaving;
+    }
+
+    /**
+     * The pile has just been shown under cards that are on the screen: it
+     * fades and grows in, in place. Not when it is shown with them.
+     */
+    enter() {
+        if (!this.get_parent()?.mapped || !St.Settings.get().enable_animations)
+            return;
+        this.opacity = 0;
+        this.set_scale(SHOW_SCALE, SHOW_SCALE);
+        // Once the first frame is drawn, see settle.js.
+        easeSettled(this, {
+            opacity: 255, scale_x: 1, scale_y: 1,
+            duration: SHOW_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        });
+    }
+
+    /**
+     * The last file is gone: the pile fades and shrinks in place with the
+     * files it had, is hidden, and done() is called. False when the pile is
+     * not on the screen: nothing is done then, and done() is not called.
+     * setButtons() with new files in that time brings the pile back.
+     */
+    leave(done) {
+        if (this._leaving)
+            return true;
+        if (!this.mapped || this._buttons.length === 0 ||
+            !St.Settings.get().enable_animations)
+            return false;
+        this._leaving = true;
+        this._land(0);
+        for (const button of this._buttons)
+            button.reactive = false;
+        this.ease({
+            opacity: 0, scale_x: SHOW_SCALE, scale_y: SHOW_SCALE,
+            duration: SHOW_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onComplete: () => {
+                this._leaving = false;
+                this.hide();
+                this.opacity = 255;
+                this.set_scale(1, 1);
+                done();
+            },
+        });
+        return true;
     }
 
     /**
@@ -291,6 +368,16 @@ class KelpPile extends St.Widget {
         this._hovered = null;
         for (const button of buttons)
             button.set_pivot_point(0.5, 0.5);
+        if (this._leaving) {
+            // Files have come while the pile faded out: it comes back from
+            // where it is.
+            this._leaving = false;
+            this.ease({
+                opacity: 255, scale_x: 1, scale_y: 1,
+                duration: SHOW_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        }
         this._restack();
         this._apply(false);
         for (const button of arrived) {
@@ -448,7 +535,7 @@ class KelpPile extends St.Widget {
         animate &&= St.Settings.get().enable_animations;
         this._buttons.forEach((button, i) => {
             const to = this._target(button, i);
-            button.reactive = to.opacity > 0;
+            button.reactive = to.opacity > 0 && !this._leaving;
             for (const name of ['translation-x', 'translation-y', 'rotation-angle-z',
                 'scale-x', 'scale-y', 'opacity'])
                 button.remove_transition(name);
@@ -826,8 +913,10 @@ class Popup {
 }
 
 export class DownloadsCard {
-    constructor(sidebar) {
+    /** kept: the state of the card before a lock, or null. */
+    constructor(sidebar, kept = null) {
         this._sidebar = sidebar;
+        this._kept = kept;      // until the first _watch()
         this._collapsed = false;
         this._enabled = false;
         this._watched = undefined;   // the path that is watched, null for none
@@ -849,6 +938,14 @@ export class DownloadsCard {
         this._tip = new Tip();
         this._popup = new Popup(this);
         this.sync();
+    }
+
+    /**
+     * What the constructor takes after a lock, so that the pile is shown
+     * with the cards and not when the folder has been read again.
+     */
+    get state() {
+        return {path: this._watched, items: this.items, known: this._known};
     }
 
     destroy() {
@@ -892,7 +989,16 @@ export class DownloadsCard {
         this._known = null;
         this._tried.clear();
         this.items = [];
+        const kept = this._kept;
+        this._kept = null;
         if (this.dir) {
+            // The files as they were before the lock, until the scan
+            // below has read the folder. A file that came while the
+            // screen was locked arrives then.
+            if (kept?.path === path) {
+                this.items = kept.items;
+                this._known = kept.known;
+            }
             try {
                 this._monitor = this.dir.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
                 this._monitor.connect('changed', () => this._scanSoon());
@@ -1076,6 +1182,15 @@ export class DownloadsCard {
         const layout = this._collapsed ? COLLAPSED : EXPANDED;
         const size = layout.icon;
         const shown = this.items.slice(0, PILE);
+        this._tip.hide();
+        // The last file is gone. The pile fades out with the files it
+        // had, and is drawn again after that, empty and hidden.
+        const left = () => {
+            if (!this._destroyed)
+                this._show([]);
+        };
+        if (shown.length === 0 && this._pile.leave(left))
+            return;
         const buttons = shown.map(item => this._fileButton(item, size));
         const fresh = buttons.filter((_button, i) => arrived.includes(shown[i]));
         // The folder is the last of the spread pile.
@@ -1092,10 +1207,12 @@ export class DownloadsCard {
             this._name(folder, this.dir.get_basename() ?? 'Downloads');
             buttons.push(folder);
         }
-        this._tip.hide();
+        // Shown before it gets its files: Clutter starts no transition on
+        // an actor that is not on the screen, and the first file of an
+        // empty folder would not grow in.
+        this._syncVisible(fresh.length > 0);
         this._pile.setButtons(buttons, layout, hasFolder, fresh);
         this._syncSpread();
-        this._syncVisible();
         if (fresh.length > 0 && !this._pile.spread)
             this._pile.hop();
     }
@@ -1109,6 +1226,9 @@ export class DownloadsCard {
         // The pile reports the end of its hover when the sidebar is taken
         // off the stage, after destroy().
         if (this._destroyed)
+            return;
+        // The files of a pile that fades out stay where they are.
+        if (this._pile.leaving)
             return;
         const open = this._popup?.isOpen;
         const spread = open || (this._pile.hover && !this._dragging);
@@ -1238,8 +1358,15 @@ export class DownloadsCard {
         });
     }
 
-    _syncVisible() {
+    /** arrived: the pile is shown for a file that grows in by itself. */
+    _syncVisible(arrived = false) {
+        // It is hidden when it has faded out, see _show().
+        if (this._pile.leaving)
+            return;
+        const was = this.actor.visible;
         this.actor.visible = this._enabled && this.items.length > 0;
+        if (this.actor.visible && !was && !arrived)
+            this._pile.enter();
         if (!this.actor.visible) {
             this._popup.close(false);
             this._tip.hide();

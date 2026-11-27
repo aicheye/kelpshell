@@ -311,6 +311,7 @@ export default class Kelpshell extends Extension {
         this._disableUser();
         this._disableLock(true);
         // Disabled while the screen is locked: nothing comes back.
+        clearPictures();
         this._kept?.hold.release();
         this._kept = null;
         dropSavedLayout();
@@ -352,7 +353,12 @@ export default class Kelpshell extends Extension {
             () => this.cheatsheet?.disable(),
             () => this.switcher?.disable(),
             () => this.clipboard?.disable(),
-            () => clearPictures(),
+            // A lock keeps the decoded pictures: the downloads pile shows
+            // them in its first frame after the unlock.
+            () => {
+                if (!lock)
+                    clearPictures();
+            },
             () => {
                 if (this.tweaks)
                     this.tweaks.onSuper = null;

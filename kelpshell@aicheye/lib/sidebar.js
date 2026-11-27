@@ -4481,7 +4481,7 @@ export class Sidebar {
         this._minimap = new Minimap(this);
         this._media = new MediaCard(this);
         this._notifications = new NotificationsCard(this);
-        this._downloads = new DownloadsCard(this);
+        this._downloads = new DownloadsCard(this, state?.downloads);
         this._system = new SystemCard(this);
         this._privacy = new PrivacyCard(this);
         this._controls = new ControlsCard(this);
@@ -4589,6 +4589,8 @@ export class Sidebar {
             collapsed: this.collapsed,
             // Shown over a fullscreen window, to stay.
             peek: this._covered === true && this._peek && this._peekPos.target > 0,
+            // The files of the pile, see DownloadsCard.state.
+            downloads: this._downloads.state,
         };
     }
 
