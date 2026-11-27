@@ -1140,11 +1140,6 @@
   border: 2px solid st-transparentize(-st-accent-color, 0.2);
   border-radius: 15px;
 }
-.kelp-drop-bar {
-  background-color: -st-accent-color;
-  border: none;
-  border-radius: 3px;
-}
 
 /* ---------- shortcut sheet ---------- */
 

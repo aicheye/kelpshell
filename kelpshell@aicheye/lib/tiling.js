@@ -124,7 +124,6 @@ const DRAG_DISTANCE = 24;
 // window beside the column as a column of its own.
 const DROP_SIDE_SHARE = 0.25;
 const DROP_SIDE_MAX = 140;
-const DROP_BAR_WIDTH = 6;
 // Size of the icon that stands for a window dragged into the sidebar, px.
 const SUNK_ICON_SIZE = 48;
 
@@ -288,7 +287,7 @@ class DropHint {
     }
 
     /**
-     * rect: {x, y, width, height, bar}. dragged: the dragged window's actor.
+     * rect: {x, y, width, height}. dragged: the dragged window's actor.
      * The hint is drawn over that window: the window is as large as the
      * place it would take, and would cover a hint under it.
      */
@@ -301,10 +300,6 @@ class DropHint {
             r.height === rect.height)
             return;
         this._rect = rect;
-        if (rect.bar)
-            actor.add_style_class_name('kelp-drop-bar');
-        else
-            actor.remove_style_class_name('kelp-drop-bar');
         actor.remove_all_transitions();
         if (!r) {
             actor.set_position(rect.x, rect.y);
@@ -6044,13 +6039,23 @@ export class Tiling {
      * {index, rect, places} to become a column at an index. The index
      * counts the strip's columns without the dragged window's own column
      * when the window is alone in it, which is how the strip is once the
-     * window is taken out. rect is the place to show. places, where rect is
-     * a whole place, has the x of each other window that is somewhere else
-     * once the window is dropped, see _showPlaces.
+     * window is taken out. rect is the place to show. places has the x of
+     * each other window that is somewhere else once the window is dropped,
+     * see _showPlaces.
      *
-     * The places are read from the layout (Tile.target) and not from where
-     * the windows are drawn, so a window that _showPlaces has moved out of
-     * the way keeps the drop places it had.
+     * The rules, for the pointer over the strip:
+     *   - the middle of a column: into that column, at the row the pointer
+     *     is at and at the column's width.
+     *   - a side of a column (DROP_SIDE_SHARE) or a gap: a column of its
+     *     own on that side, at the width the window has.
+     *   - over a fullscreen window: the left or the right edge of the
+     *     monitor, by the half the pointer is on, or into the column of a
+     *     window that is shown over it.
+     *
+     * The columns are read from the layout (Tile.target) and not from
+     * where the windows are drawn. A window that _showPlaces has moved out
+     * of the way keeps its drop places, so the place under a pointer at
+     * rest does not change while the windows move.
      */
     _dropTarget(tile, strip, px, py) {
         const area = strip.area;
@@ -6131,25 +6136,14 @@ export class Tiling {
             const t = tile.target;
             return {index, rect: {x: t.x, y: t.y, width: t.width, height: t.height}};
         }
-        const prev = cols[index - 1];
-        const next = cols[index];
-        // Before the first column, after the last one, or on a strip with
-        // no other window: the place it has once it is dropped, at the
-        // width it keeps.
-        if (!prev || !next) {
-            const places = new Map();
-            const rect = strip.placeAsColumn(tile, index, tile.column?.proportion, places);
-            return {index, rect, places};
-        }
-        // Between two columns: a bar in the gap they move apart from.
-        const width = DROP_BAR_WIDTH * s;
-        const mid = (prev.x + prev.width + next.x) / 2;
-        const x = clamp(Math.round(mid - width / 2), area.x, area.x + area.width - width);
-        return {
-            index, rect: {
-                x, y: area.y + gap, width, height: area.height - 2 * gap, bar: true,
-            },
-        };
+        // Beside a column, at the width the window keeps: the place it has
+        // once it is dropped. The other windows are drawn where they are
+        // then (places), so the place is free: with the view where it is,
+        // the windows between the place the window left and this one each
+        // move over by one place.
+        const places = new Map();
+        const rect = strip.placeAsColumn(tile, index, tile.column?.proportion, places);
+        return {index, rect, places};
     }
 
     _onGrabEnd(win) {
