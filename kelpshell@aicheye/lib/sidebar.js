@@ -4968,8 +4968,9 @@ export class Sidebar {
     }
 
     /**
-     * The cards spring back out: a swipe or a focus key the other way, or
-     * a swipe that brought them in and did not go far enough. velocity is
+     * The cards spring back out: a swipe or a focus key the other way, a
+     * click on a window, a change of workspace, or a swipe that brought
+     * them in and did not go far enough. velocity is
      * the speed they had, in px/s, positive when more of them was coming
      * into view.
      */

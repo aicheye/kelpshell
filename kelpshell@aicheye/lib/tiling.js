@@ -3226,6 +3226,73 @@ class Strip {
     }
 
     /**
+     * The fullscreen window took the focus without a swipe or a focus key:
+     * a click on it, the switcher, the minimap. The windows over it leave
+     * the way they came, those of each side by the same distance, and are
+     * under it after that. Returns false when no window is over it.
+     *
+     * Mutter has the fullscreen window over every other one from the
+     * moment it has the focus, and the compositor puts the actors in that
+     * order before the next frame: the windows over it would be gone in
+     * that frame. Their actors are put over it again after the compositor
+     * has done that, for as long as they are on their way.
+     */
+    coverClear() {
+        const cover = this.cover;
+        if (!cover || this.focus !== cover || this._swipe || !this.wm.animator.enabled)
+            return false;
+        const over = this.tiles.filter(t => t !== cover && !t.fullscreen && t.target &&
+            !t.dead && !this._under(t, cover));
+        if (over.length === 0)
+            return false;
+        this._settle?.finish();
+        const at = this.columns.indexOf(cover.column);
+        const [left, right] = this._view;
+        const sideOf = t => Math.sign(this.columns.indexOf(t.column) - at) || 1;
+        // As far as takes the one of its side that is furthest in past
+        // the edge of the monitor.
+        const reach = side => Math.max(0, ...over.filter(t => sideOf(t) === side)
+            .map(t => side > 0 ? right - t.x.value : t.x.value + t.target.width - left));
+        const laters = global.compositor.get_laters();
+        const group = cover.actor?.get_parent();
+        const stack = above => {
+            for (const tile of over) {
+                if (tile.dead || !group || tile.actor?.get_parent() !== group || cover.dead)
+                    continue;
+                if (above)
+                    group.set_child_above_sibling(tile.actor, cover.actor);
+                else
+                    group.set_child_below_sibling(tile.actor, cover.actor);
+            }
+        };
+        global.compositor.disable_unredirect();
+        // Laters of this kind run after the one the compositor orders its
+        // actors in.
+        let laterId = laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
+            laterId = 0;
+            stack(true);
+            return GLib.SOURCE_REMOVE;
+        });
+        for (const tile of over) {
+            const side = sideOf(tile);
+            tile.cameFrom = null;
+            tile.x.target = tile.x.value + side * reach(side);
+            tile.x.velocity = 0;
+        }
+        this._settleWhen(over, () => {
+            if (laterId)
+                laters.remove(laterId);
+            laterId = 0;
+            stack(false);
+            for (const tile of this.tiles)
+                tile.cameFrom = null;
+            this.layout(false);
+            global.compositor.enable_unredirect();
+        });
+        return true;
+    }
+
+    /**
      * A window that came in over the fullscreen one is gone from the
      * strip: closed, minimized, moved away. to is the window that is in
      * view now, before the scroll the strip had before the other came in.
@@ -3247,6 +3314,51 @@ class Strip {
             this.scroll = clamp(this._scrollFor(to.column, viewW, before), lo, hi);
             this.freeScroll = false;
         }
+    }
+
+    /**
+     * The workspace of this strip has been left and is out of view. The
+     * windows over the fullscreen one go under it again, in one step, and
+     * the strip has the scroll from before the first of them came in. On
+     * the way back the workspace shows the fullscreen window alone, and
+     * Mutter gives it the focus: it is the top window there.
+     *
+     * Left as they were, the windows over the fullscreen one would come
+     * back with it, while the sidebar that was shown over it with them
+     * has gone: its cards belong to the monitor, and the workspace that
+     * was shown in between has them at their place.
+     */
+    unpeek() {
+        const cover = this.cover;
+        if (!cover)
+            return;
+        this.abortCover();
+        const at = this.columns.indexOf(cover.column);
+        const away = t => Math.abs(this.columns.indexOf(t.column) - at);
+        // The nearest to the fullscreen window came in first.
+        const over = this.tiles
+            .filter(t => t !== cover && !t.fullscreen && t.target && !this._under(t, cover))
+            .sort((a, b) => away(a) - away(b));
+        if (over.length === 0 && this.focus === cover)
+            return;
+        const before = over.find(t => t.cameFrom !== null)?.cameFrom ?? null;
+        if (before !== null) {
+            this.scroll = before;
+            this.freeScroll = false;
+        }
+        for (const tile of over) {
+            // As in _coverLeave(): the compositor follows the stack of
+            // the windows a frame later, so the actor is put there too.
+            tile.win.lower();
+            const group = tile.actor?.get_parent();
+            if (group && cover.actor?.get_parent() === group)
+                group.set_child_below_sibling(tile.actor, cover.actor);
+        }
+        for (const tile of this.tiles)
+            tile.cameFrom = null;
+        this.focus = cover;
+        cover.column.active = cover;
+        this.layout(false);
     }
 
     /** Whether a tile's window is drawn under the fullscreen window. */
@@ -3824,11 +3936,21 @@ export class Tiling {
                 // Read before Mutter gives the focus to a window of the new
                 // workspace, see _onWorkspaceSwitched().
                 this._switchedOn = this.activeMonitor;
+                this._switching = true;
                 this.ring.sync();
                 this._leaveCurrent();
                 this._changed();
             },
-            'workspace-switched', () => this._onWorkspaceSwitched(),
+            'workspace-switched', () => {
+                this._switching = false;
+                // See _onFocus().
+                const cover = this._refocus;
+                this._refocus = null;
+                if (cover && this.tiles.has(cover) && cover.is_fullscreen())
+                    cover.activate(global.get_current_time());
+                this._onWorkspaceSwitched();
+                this._unpeekSoon();
+            },
             this);
         Main.layoutManager.connectObject('monitors-changed', () => {
             for (const win of [...this.tiles.keys()])
@@ -3929,6 +4051,12 @@ export class Tiling {
         if (this._afterId)
             GLib.source_remove(this._afterId);
         this._afterId = 0;
+        if (this._unpeekId)
+            global.compositor.get_laters().remove(this._unpeekId);
+        this._unpeekId = 0;
+        this._slide = null;
+        this._switching = false;
+        this._refocus = null;
         this._wantCurrent = null;
         this._currentPending = false;
         for (const strip of this.strips.values())
@@ -4088,11 +4216,46 @@ export class Tiling {
         };
         group.connect('notify::progress', update);
         group.connect('destroy', () => {
+            // The workspace that was left is out of view now.
+            this._unpeekLeft();
             if (this._slide !== group)
                 return;
             this._slide = null;
             this.setBetween('workspaces', null);
         });
+    }
+
+    /**
+     * The workspace has changed. What was shown over a fullscreen window
+     * is put away, so a workspace with a fullscreen window comes back as
+     * that window alone: the windows over it once the workspace they are
+     * on is out of view (Strip.unpeek), and the sidebar, if the workspace
+     * that is entered has a fullscreen window too, now.
+     *
+     * Before the next frame: the shell has made the slide by then, if
+     * there is one, and Mutter has looked at which monitor is in
+     * fullscreen, so the sidebar knows whether it is still over a
+     * fullscreen window.
+     */
+    _unpeekSoon() {
+        this._unpeekId ||= global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+            this._unpeekId = 0;
+            if (this.peekSink?.held())
+                this.peekSink.end(0);
+            // During a slide the workspace that was left is still shown.
+            if (!this._slide)
+                this._unpeekLeft();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    /** Every strip of a workspace that is not shown, see _unpeekSoon(). */
+    _unpeekLeft() {
+        const active = global.workspace_manager.get_active_workspace();
+        for (const strip of this.strips.values()) {
+            if (strip.workspace && strip.workspace !== active)
+                strip.unpeek();
+        }
     }
 
     // ---- strips ----
@@ -4568,9 +4731,23 @@ export class Tiling {
             'notify::maximized-horizontally', () => this._onMaximized(win),
             'notify::maximized-vertically', () => this._onMaximized(win),
             'notify::above', () => this._retile(win),
+            'raised', () => this._onRaised(win),
             'notify::resizeable', () => this._onResizeable(win),
             'notify::title', () => this._onTitle(win),
             this);
+    }
+
+    /**
+     * A window was raised: by a click on it, also when it has the focus
+     * and is on top already, or because it was activated. The sidebar that
+     * was brought in over a fullscreen window leaves then: the work goes
+     * on in the window. The stage is not told of a press that goes to a
+     * window, so this signal is what there is for a click.
+     */
+    _onRaised(win) {
+        const peek = this.peekSink;
+        if (peek?.held() && peek.available(win.get_monitor()))
+            peek.end(0);
     }
 
     /**
@@ -5209,6 +5386,21 @@ export class Tiling {
         // so the ring and the minimap stay where they are.
         if (win && isHelper(win))
             return;
+        // Mutter gives the focus to the window used last on the workspace
+        // that is entered. A window that was over the fullscreen one when
+        // the workspace was left is under it now (Strip.unpeek), with
+        // nothing of it to see: the fullscreen window takes the focus once
+        // the workspace has changed. A window that was activated on that
+        // workspace was raised first, and keeps the focus.
+        if (win && this._switching) {
+            const tile = this.tiles.get(win);
+            const cover = tile?.strip?.tiles.find(t => t.fullscreen);
+            if (cover && cover !== tile &&
+                global.display.sort_windows_by_stacking([win, cover.win])[0] === win) {
+                this._refocus = cover.win;
+                return;
+            }
+        }
         // A new window takes focus before Mutter has moved it to the monitor
         // it was given, so its strip or its pending monitor comes first.
         if (win) {
@@ -5254,6 +5446,10 @@ export class Tiling {
                     if (!tile.dead && tile.strip === strip)
                         strip.coverFocus(tile);
                 });
+            } else if (!own && tile === strip.cover) {
+                // Now, and not when the button is up: Mutter has the
+                // fullscreen window over the others from this moment.
+                strip.coverClear();
             }
         }
         const fade = !this._resumed;
