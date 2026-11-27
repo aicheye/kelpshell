@@ -689,6 +689,7 @@ export class Backdrop {
             path, info.get_attribute_uint64('time::modified'), info.get_size(), w, h,
             this._bgSettings.get_string('picture-options'),
             theme.saturation, theme.blur, theme.tintStrength, this._tint(), this._opacity(),
+            theme.curve ?? 1,
         ].join('|');
         const sum = GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, key, -1);
         return GLib.build_filenamev([this._dir, `backdrop-${sum}.png`]);
@@ -805,6 +806,12 @@ export class Backdrop {
             ch = Math.max(4, ch >> 1);
             pb = pb.scale_simple(cw, ch, GdkPixbuf.InterpType.BILINEAR);
         }
+        // theme.curve, which only the lock screen sets (lib/lockscreen.js):
+        // every channel to that power. On the smallest picture of the blur,
+        // 80 x 45 pixels for a 2560 x 1440 monitor after 5 passes.
+        const curve = Number(theme.curve);
+        if (Number.isFinite(curve) && curve > 0 && curve !== 1)
+            pb = this._curve(pb, curve);
         while (sizes.length) {
             const [pw, ph] = sizes.pop();
             pb = pb.scale_simple(pw, ph, GdkPixbuf.InterpType.HYPER);
@@ -832,6 +839,33 @@ export class Backdrop {
             throw new Error(`cannot write ${path}`);
         }
         return path;
+    }
+
+    /**
+     * pb with every colour channel, from 0 to 1, raised to the power
+     * curve. Above 1 this darkens a colour and leaves its strongest channel
+     * nearly as it is, so an orange gets deeper and does not turn brown,
+     * which it does when it is mixed toward a dark tint.
+     */
+    _curve(pb, curve) {
+        const table = new Uint8Array(256);
+        for (let v = 0; v < 256; v++)
+            table[v] = Math.round(255 * (v / 255) ** curve);
+        const pixels = pb.get_pixels();
+        const channels = pb.get_n_channels();
+        const stride = pb.get_rowstride();
+        const width = pb.get_width();
+        const height = pb.get_height();
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const at = y * stride + x * channels;
+                pixels[at] = table[pixels[at]];
+                pixels[at + 1] = table[pixels[at + 1]];
+                pixels[at + 2] = table[pixels[at + 2]];
+            }
+        }
+        return GdkPixbuf.Pixbuf.new_from_bytes(new GLib.Bytes(pixels),
+            GdkPixbuf.Colorspace.RGB, pb.get_has_alpha(), 8, width, height, stride);
     }
 
     /** The tint of the current style, as 0xrrggbb. */

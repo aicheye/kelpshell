@@ -66,7 +66,7 @@ export const DEFAULTS = {
         liveBlurTint: 0.7,    // how far the blurred windows are mixed toward the tint; 1 = no blur to see
         shade: 0.35,          // how far windows under the sidebar are darkened towards black at the edge of the monitor, less under a sidebar narrower than 200 px; 0 = off, 1 = black
         shadeRamp: 0.1,       // where the blur starts to lessen, as a share of the width under the sidebar
-        lockTint: 0.3,        // how far the lock screen's wallpaper is mixed toward the tint; 0 = the blurred wallpaper as it is
+        lockTint: 0.15,       // how far the lock screen's wallpaper is mixed toward the tint; 0 = the blurred wallpaper as it is
     },
     launcher: {
         width: 640,

@@ -48,8 +48,14 @@ const SHELL_BRIGHTNESS = 0.65;
 // theme.lockTint. This is the value used when the config has none that is a
 // number. At 0.58, which is what the two steps above give together
 // (1 - 0.65 * 0.64), the picture has 42% of the wallpaper's brightness and
-// looks duller than the wallpaper.
-const WALL_TINT = 0.3;
+// looks duller than the wallpaper. At 0.3 a wallpaper of bright orange and
+// pink is brown and dusty: #ff9628 becomes #b97025.
+const WALL_TINT = 0.15;
+// Every channel of the picture is raised to this power before the mix. It
+// darkens a colour about as much as the tint did at 0.3 and keeps its
+// strongest channel, so the orange above becomes #dc761c with the mix.
+// White stays white, and is #dcdcdd after the mix.
+const WALL_CURVE = 1.2;
 // Its blur in passes (theme.blur goes from 0 to 6).
 const WALL_BLUR = 5;
 // AM or PM, in percent of the size of the digits: 12px beside 31px in the
@@ -82,6 +88,7 @@ function wallConfig(config) {
                     tintStrength: wallTint(config),
                     opacity: 1,
                     blur: WALL_BLUR,
+                    curve: WALL_CURVE,
                 },
             };
         },

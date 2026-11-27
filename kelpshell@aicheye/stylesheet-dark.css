@@ -1786,7 +1786,7 @@
   spacing: 2px;
   color: #f4f4f6;
 }
-/* The wallpaper keeps 70% of its brightness (theme.lockTint), so a light
+/* The wallpaper keeps 85% of its brightness (theme.lockTint), so a light
    part of it comes close to the white of the text: on a pale green the
    date and the hint cannot be read as plain text. Every text on the
    wallpaper has a soft dark shadow, and the lesser texts are close to
