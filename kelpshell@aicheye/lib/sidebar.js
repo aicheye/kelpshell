@@ -4427,6 +4427,9 @@ export class Sidebar {
         // px of the cards' width shown over a fullscreen window. It follows
         // the fingers, and goes to its target on the spring of the windows.
         this._peekPos = new Spring();
+        // The monitor is no longer in fullscreen and the cards are at their
+        // place: _peekPos goes on to 0 for the windows alone, see _syncFullscreen.
+        this._peekFree = false;
         // The width of the cards while they collapse or expand:
         // {from, to, elapsed, most, step, done}, see reposition().
         //
@@ -4464,6 +4467,12 @@ export class Sidebar {
         };
         this._peekItem = {
             tick: (dt, omega, zeta) => {
+                if (this._peekFree) {
+                    this._peekPos.step(dt, omega, zeta);
+                    this._peekFree = !this._peekPos.atRest;
+                    this.tiling.peekMoved();
+                    return this._peekFree;
+                }
                 if (!this.actor || !this._covered || !this._peek)
                     return false;
                 this._peekPos.step(dt, omega, zeta);
@@ -4556,7 +4565,7 @@ export class Sidebar {
             // cards (_placeStrut): this is the width it has without one.
             room: monitor => this._strut &&
                 monitor === Main.layoutManager.primaryMonitor?.index ? this._strutWidth : 0,
-            amount: () => this._peek
+            amount: () => this._peek || this._peekFree
                 ? Math.max(0, Math.min(this._peekPos.value, this._margin() + this._cardWidth())) : 0,
             // px of the cards that can be shown: a pull stops there.
             width: () => this._margin() + this._cardWidth(),
@@ -4895,6 +4904,8 @@ export class Sidebar {
         // width. Cards that a swipe had shown over the fullscreen window
         // then stay shown: the collapse button on them would hide them.
         const peek = this._covered === null && covered && this._peek;
+        // px the cards had moved the windows over the fullscreen one by.
+        const pushed = this._covered === true ? this.tiling.peekSink?.amount() ?? 0 : 0;
         this._covered = covered;
         this._placeStrut();
         this._peek = peek;
@@ -4905,6 +4916,17 @@ export class Sidebar {
             this._peekPos.set(-shift);
         else
             this._peekStop();
+        // A change to a workspace with no fullscreen window: the cards
+        // are at their place there, and the windows of the workspace that
+        // is left return on the spring to where they were before the cards
+        // came. With the shown width at 0 from this frame they would be
+        // there in one frame, while their workspace is still in view.
+        if (!covered && pushed > 0 && animate && this.tiling.animator?.enabled) {
+            this._peekFree = true;
+            this._peekPos.set(pushed);
+            this._peekPos.target = 0;
+            this.tiling.animator.add(this._peekItem);
+        }
         this.tiling.peekMoved();
         actor.remove_transition('translation-x');
         if (!animate || !St.Settings.get().enable_animations) {
@@ -5043,6 +5065,7 @@ export class Sidebar {
 
     /** Stop the spring. */
     _peekStop() {
+        this._peekFree = false;
         this.tiling.animator?.remove(this._peekItem);
     }
 

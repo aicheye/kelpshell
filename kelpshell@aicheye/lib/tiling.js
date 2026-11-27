@@ -3098,7 +3098,11 @@ class Strip {
             if (!stays) {
                 // The fullscreen window takes focus once the column is all
                 // the way out: that raises it over the column at once.
-                if (!cover.dead && cover.strip === this) {
+                // Not from a window of this strip that took the focus
+                // while the column left: the switcher, the minimap.
+                const other = this.tiles.some(t => t !== cover && !tiles.includes(t) &&
+                    t.win.has_focus());
+                if (!cover.dead && cover.strip === this && !other) {
                     this.focus = cover;
                     cover.column.active = cover;
                     if (this.wm.isActiveStrip(this) && !cover.win.has_focus())
@@ -3158,7 +3162,12 @@ class Strip {
         const next = at >= 0 ? this.columns[at + dir] ?? null : null;
         if (!next) {
             if (dir < 0 && peek?.available(this.monitor)) {
-                peek.hold();
+                // The same key again sends the cards back out: there is
+                // nothing further to the left for it to go to.
+                if (peek.held())
+                    peek.end(0);
+                else
+                    peek.hold();
                 return true;
             }
             return false;
@@ -3192,6 +3201,55 @@ class Strip {
         // 'focus': a window away from the fullscreen one that is over it
         // already is in view, or scrolls into view, like any column.
         return false;
+    }
+
+    /**
+     * A window that is not the fullscreen one is about to take the focus
+     * without a swipe or a focus key: the switcher, the minimap. Called
+     * before the strip scrolls to it and is laid out, which puts the window
+     * on its spring.
+     *
+     * A window under the fullscreen one comes in from the edge of the
+     * monitor on its side, as it does after a focus key (coverStep). Its
+     * place under the fullscreen window depends on what the strip showed
+     * last, and can be in view: from there the window would be shown at
+     * once, at or near the place it comes to rest at.
+     *
+     * A window that is on its way out stays over the fullscreen one and
+     * returns from where it is drawn. What waited for it to be out is
+     * dropped: that would put it at the end of its way in one frame and
+     * under the fullscreen window, with the focus in it.
+     */
+    coverEnter(tile) {
+        const cover = this.cover;
+        if (!cover || tile === cover || tile.fullscreen || tile.strip !== this || this._swipe)
+            return;
+        const animator = this.wm.animator;
+        const item = this._settle;
+        if (item?.tiles.includes(tile)) {
+            this._settle = null;
+            animator.remove(item);
+            // done() would have let the compositor unredirect again.
+            global.compositor.enable_unredirect();
+            for (const t of item.tiles) {
+                if (!t.dead)
+                    t.x.set(t.x.value);
+            }
+            return;
+        }
+        // Other windows that are on their way out arrive now, before the
+        // layout: the end of their way lays the strip out with no animation.
+        item?.finish();
+        const side = Math.sign(this.columns.indexOf(tile.column) - this.columns.indexOf(cover.column));
+        if (!side || !tile.target || tile.column.pending || !animator.enabled ||
+            !this.under(tile, cover))
+            return;
+        const {viewW} = this._measure();
+        const [left, right] = this._view;
+        tile.cameFrom = this._resolveScroll(viewW);
+        animator.remove(tile);
+        tile.x.set(side > 0 ? right : left - tile.target.width);
+        tile.sync();
     }
 
     /**
@@ -5573,6 +5631,10 @@ export class Tiling {
             // A swipe or a focus key over a fullscreen window has made the
             // tile the strip's focus before the window took it.
             const own = strip.focus === tile;
+            // Before the scroll changes: from the edge of the monitor, or
+            // from where it is drawn on its way out.
+            if (!own)
+                strip.coverEnter(tile);
             strip.focus = tile;
             tile.column.active = tile;
             // A new window is in the middle of the view, or as near to it
