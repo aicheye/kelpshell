@@ -273,6 +273,8 @@ export default class Kelpshell extends Extension {
             this.tweaks?.rehearseMenu('dateMenu', this.sidebar?.calendarSource, 0));
         this.rehearsal.add('quick settings', () =>
             this.tweaks?.rehearseMenu('quickSettings', this.sidebar?.quickSettingsSource, 1));
+        this.rehearsal.add('outputs', () => this.sidebar?.rehearseOutputs());
+        this.rehearsal.add('background apps', () => this.sidebar?.rehearseBackground());
         this.rehearsal.enable();
         // The material is an inline style of the cards.
         this.backdrop.onChanged(() => this.rehearsal?.restart());

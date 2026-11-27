@@ -34,7 +34,7 @@ Cards on the left edge of the primary monitor take the place of the top bar.
 - **Downloads**: the newest files of the downloads folder as a pile.
 - **System**: processor, memory, disk space, disk activity and network. Off by default, `sidebar.system` turns it on.
 - **Privacy**: there while the screen is recorded or shared, or an app uses the microphone or a camera. A click stops the recording, stops the sharing, or mutes the microphone, and the pointer is a hand over those three. Under the pointer the microphone chip shows what a click makes of it.
-- **Status**: network, Bluetooth, battery and volume. A click opens quick settings, a secondary click on the volume icon lists the output devices.
+- **Status**: network, Bluetooth, battery and volume. A click opens quick settings, a secondary click on the volume icon lists the output devices. The apps that run without a window are a row of icons there. A click lists them, each with a button to quit it.
 
 `Super+B` collapses the sidebar to a strip of icons, and the windows move over with it. It hides while a window is fullscreen.
 

@@ -808,31 +808,35 @@
   padding: 9px 7px;
 }
 
-/* ---------- output menu ---------- */
+/* ---------- menus beside the sidebar ---------- */
 
-.kelp-output-menu {
+.kelp-side-menu {
   padding: 6px;
   border-radius: 14px;
   min-width: 190px;
   max-width: 340px;
 }
-.kelp-output-list {
+.kelp-side-list {
   spacing: 2px;
 }
-.kelp-output-row {
+.kelp-side-row {
   border-radius: 9px;
   padding: 8px 10px;
   transition-duration: 80ms;
 }
-.kelp-output-row:hover,
-.kelp-output-row:selected {
+.kelp-side-row:hover,
+.kelp-side-row:selected {
   background-color: rgba(255, 255, 255, 0.10);
 }
-.kelp-output-row:active {
+.kelp-side-row:active {
   background-color: rgba(255, 255, 255, 0.16);
 }
-.kelp-output-row-box {
+.kelp-side-row-box {
   spacing: 9px;
+}
+.kelp-side-empty {
+  padding: 8px 10px;
+  color: rgba(255, 255, 255, 0.55);
 }
 .kelp-output-name {
   font-size: 13px;
@@ -845,9 +849,66 @@
   icon-size: 14px;
   color: rgba(255, 255, 255, 0.80);
 }
-.kelp-output-empty {
-  padding: 8px 10px;
+
+/* ---------- background apps ---------- */
+
+/* The row in the controls card. The 4px over it are the spacing of the
+   card's rows: they close with the row. */
+.kelp-bg-slot {
+  padding-top: 4px;
+}
+.kelp-bg {
+  padding: 8px 6px;
+}
+.kelp-bg-icons {
+  spacing: 8px;
+}
+.kelp-bg-icon {
+  icon-size: 16px;
+}
+.kelp-bg-more {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.62);
+}
+.collapsed .kelp-bg-more {
+  font-size: 10px;
+}
+/* The list. The 2px between two rows are 1px over and under each, so a row
+   that closes takes its spacing with it. */
+.kelp-bg-menu {
+  min-width: 250px;
+}
+.kelp-bg-menu .kelp-side-list {
+  spacing: 0;
+}
+.kelp-bg-caption {
+  padding: 5px 10px 6px 10px;
+}
+.kelp-bg-row-slot {
+  padding: 1px 0;
+}
+/* 32px: the height of a name with a line under it, so every row is as high. */
+.kelp-bg-row {
+  padding: 7px 6px 7px 10px;
+}
+.kelp-bg-row .kelp-side-row-box {
+  min-height: 32px;
+}
+.kelp-bg-app-icon {
+  icon-size: 24px;
+}
+.kelp-bg-name {
+  font-size: 13px;
+}
+.kelp-bg-message {
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.55);
+}
+/* 7px: behind the 6px padding of the row, whose corners are 9px. */
+.kelp-bg-quit {
+  border-radius: 7px;
+  padding: 6px;
 }
 
 /* ---------- launcher ---------- */

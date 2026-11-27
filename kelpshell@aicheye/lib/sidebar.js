@@ -23,12 +23,15 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Mpris from 'resource:///org/gnome/shell/ui/mpris.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
+import {Spinner} from 'resource:///org/gnome/shell/ui/animation.js';
 
+import {BackgroundApps} from './bgapps.js';
 import {Thumbnail} from './corners.js';
 import {contentRect} from './crop.js';
 import {DownloadsCard} from './downloads.js';
 import {EDGE} from './edgefade.js';
 import {afterSettle, easeSettled, holdTransitions} from './settle.js';
+import {endRehearsal} from './warm.js';
 import {Spring} from './spring.js';
 import {steadyLine} from './text.js';
 
@@ -105,18 +108,23 @@ class KelpInsertMark extends St.Widget {
 // of it, 0 is none. The share is a property, so it can be eased, and whatever
 // is laid out under this actor moves up as the child closes. The child keeps
 // its full height and is cut off, and fades with the share.
+//
+// With bottom, the child is shown from its lower edge up: for a child over
+// something that stays where it is on the screen, so the child stays there
+// too and what is over it moves.
 const Reveal = GObject.registerClass({
     Properties: {
         'share': GObject.ParamSpec.double('share', 'share', 'share',
             GObject.ParamFlags.READWRITE, 0, 1, 1),
     },
 }, class KelpReveal extends St.Widget {
-    _init(child) {
+    _init(child, bottom = false) {
         super._init({
             layout_manager: new Clutter.BinLayout(),
             clip_to_allocation: true,
             x_expand: true,
         });
+        this._bottom = bottom;
         this._share = 1;
         this.add_child(child);
     }
@@ -148,7 +156,7 @@ const Reveal = GObject.registerClass({
         const width = box.get_width();
         const [, height] = child.get_preferred_height(width);
         const place = new Clutter.ActorBox();
-        place.set_origin(0, 0);
+        place.set_origin(0, this._bottom ? box.get_height() - height : 0);
         place.set_size(width, height);
         child.allocate(place);
     }
@@ -3585,7 +3593,8 @@ const STATUS_FILLS = {
 };
 
 class ControlsCard {
-    constructor(sidebar) {
+    /** background: the row of the background apps before a lock, see BackgroundRow.state. */
+    constructor(sidebar, background = null) {
         this._sidebar = sidebar;
 
         // The top bar's status icons (network, sound, battery, microphone in
@@ -3680,6 +3689,7 @@ class ControlsCard {
         // only while that row is hidden.
         this._volume = new VolumeRow(sidebar);
         this._volume.actor.connect('notify::visible', () => this._syncStatus());
+        this._background = new BackgroundRow(sidebar, background);
         // After the battery group and the volume row exist: the count of
         // the places looks at both.
         this._fillTries = 0;
@@ -3699,7 +3709,12 @@ class ControlsCard {
             style_class: 'kelp-card kelp-controls',
             orientation: VERTICAL,
         });
-        surface.add_child(this._status);
+        // The status row and the row of the background apps, which has
+        // its spacing in itself, in a box with none.
+        const head = new St.BoxLayout({orientation: VERTICAL, x_expand: true});
+        head.add_child(this._status);
+        head.add_child(this._background.actor);
+        surface.add_child(head);
         surface.add_child(this._volume.actor);
         surface.add_child(this._buttons);
         this.actor = sidebar.backdrop.wrap(surface, '', {x_expand: true}, true);
@@ -3833,6 +3848,18 @@ class ControlsCard {
         this._syncStatus();
     }
 
+    get backgroundState() {
+        return this._background.state;
+    }
+
+    rehearseOutputs() {
+        return this._volume.rehearse();
+    }
+
+    rehearseBackground() {
+        return this._background.rehearse();
+    }
+
     /**
      * Move the shell's battery icon in front of the time. The shell makes
      * it after its own startup, so this runs again whenever a status icon
@@ -3899,6 +3926,7 @@ class ControlsCard {
         if (this._indicators)
             this._indicators.orientation = orientation;
         this._volume.setCollapsed(collapsed);
+        this._background.setCollapsed(collapsed);
     }
 
     destroy() {
@@ -3921,6 +3949,7 @@ class ControlsCard {
                 box.visible = box.get_children().some(c => c.visible);
         }
         this._volume.destroy();
+        this._background.destroy();
         // Give the status icons back before the card is destroyed.
         if (this._batteryIcon) {
             this._batteryBox.remove_child(this._batteryIcon);
@@ -3996,21 +4025,18 @@ function outputNames(device, stream) {
 }
 
 /**
- * The output devices, shown next to the sidebar on a secondary click on the
- * speaker icon. A click on one makes it the output.
+ * A list shown next to the sidebar, level with the actor it was opened
+ * from. A press outside it or Escape closes it. A subclass fills this._list
+ * in _fill(), and keeps the rows that can be chosen in this._rows, each
+ * made with _row().
  */
-class OutputMenu {
-    constructor(sidebar, control) {
+class SideMenu {
+    constructor(sidebar, styleClass) {
         this._sidebar = sidebar;
-        this._control = control;
         this._rows = [];
         this._selected = -1;
         this._anchor = null;
         this.isOpen = false;
-        // The ids of the devices. libgvc has no list of them, only a signal
-        // for each one that comes and goes. Those that were there before
-        // this was made are read in open(), see _known().
-        this._ids = new Set();
 
         this._overlay = new St.Widget({reactive: true, can_focus: true, visible: false});
         // As in lib/downloads.js: a press outside closes the menu, the
@@ -4025,39 +4051,26 @@ class OutputMenu {
         });
         this._overlay.connect('key-press-event', (_a, event) => this._onKey(event));
 
-        this._list = new St.BoxLayout({style_class: 'kelp-output-list', orientation: VERTICAL});
-        const surface = new St.BoxLayout({
-            style_class: 'kelp-card kelp-output-menu',
+        this._list = new St.BoxLayout({style_class: 'kelp-side-list', orientation: VERTICAL});
+        this._surface = new St.BoxLayout({
+            style_class: `kelp-card kelp-side-menu ${styleClass}`,
             orientation: VERTICAL,
             reactive: true,
         });
-        surface.add_child(this._list);
-        this._box = sidebar.backdrop.wrap(surface, 'kelp-shadow-float', {}, true);
+        this._surface.add_child(this._list);
+        this._box = sidebar.backdrop.wrap(this._surface, 'kelp-shadow-float', {}, true);
         this._overlay.add_child(this._box);
         // The height is only right once the list has been laid out, and a
-        // device that comes or goes changes it.
+        // row that comes or goes changes it.
         this._box.connect('notify::height', () => this._place());
         Main.layoutManager.addTopChrome(this._overlay);
-
-        this._control.connectObject(
-            'output-added', (_c, id) => {
-                this._ids.add(id);
-                this._rebuild();
-            },
-            'output-removed', (_c, id) => {
-                this._ids.delete(id);
-                this._rebuild();
-            },
-            'active-output-update', () => this._rebuild(),
-            this);
     }
 
     destroy() {
         this.close(false);
-        this._control.disconnectObject(this);
         Main.layoutManager.removeChrome(this._overlay);
         this._overlay.destroy();
-        this._overlay = this._box = this._list = null;
+        this._overlay = this._box = this._surface = this._list = null;
     }
 
     /** anchor: the actor the menu is level with. */
@@ -4068,18 +4081,44 @@ class OutputMenu {
             this.open(anchor);
     }
 
+    /**
+     * For lib/warm.js: the menu with its rows, at the place it opens at
+     * from anchor, not shown. null while it is open.
+     */
+    rehearse(anchor) {
+        const monitor = Main.layoutManager.primaryMonitor;
+        // Visible after a close for as long as it fades.
+        if (this.isOpen || !monitor || !this._overlay || this._overlay.visible)
+            return null;
+        this._anchor = anchor;
+        this._fill(true);
+        this._overlay.set_position(monitor.x, monitor.y);
+        this._overlay.set_size(monitor.width, monitor.height);
+        this._place();
+        // Drawn at all only when it is not see-through, see lib/warm.js.
+        this._box.opacity = 255;
+        this._box.translation_x = 0;
+        return {actor: this._overlay, isOpen: () => this.isOpen};
+    }
+
+    /** The list has changed: the rows of an open menu follow it. */
+    _rebuild() {
+        if (this.isOpen)
+            this._fill(false);
+    }
+
     open(anchor) {
         const monitor = Main.layoutManager.primaryMonitor;
         if (this.isOpen || !monitor)
             return;
+        endRehearsal(this._overlay);
         const grab = Main.pushModal(this._overlay, {actionMode: Shell.ActionMode.POPUP});
         if (!grab)
             return;
         this._grab = grab;
         this.isOpen = true;
         this._anchor = anchor;
-        this._known();
-        this._rebuild();
+        this._fill(false);
 
         this._overlay.set_position(monitor.x, monitor.y);
         this._overlay.set_size(monitor.width, monitor.height);
@@ -4124,38 +4163,22 @@ class OutputMenu {
         });
     }
 
-    /**
-     * Add the devices that were there before this was made: those in the
-     * shell's own menu, which has followed the signals since the shell
-     * started, and the device of every stream. The shell's menu alone is
-     * not enough: it has been seen empty while five streams were there.
-     */
-    _known() {
-        const shell = Main.panel.statusArea.quickSettings?._volumeOutput?._output?._deviceItems;
-        for (const id of shell?.keys() ?? [])
-            this._ids.add(id);
-        if (this._control.get_state() !== Gvc.MixerControlState.READY)
-            return;
-        for (const sink of this._control.get_sinks()) {
-            const device = this._control.lookup_device_from_stream(sink);
-            if (device)
-                this._ids.add(device.get_id());
-        }
-    }
-
-    /** Next to the cards, level with the speaker icon where the monitor has room. */
+    /** Next to the cards, level with the anchor where the monitor has room. */
     _place() {
         const monitor = Main.layoutManager.primaryMonitor;
         const anchor = this._anchor;
-        if (!this.isOpen || !anchor || !monitor)
+        if (!this._box || !anchor || !monitor)
             return;
         const s = scaleFactor();
         // As far from the monitor's edge as the cards, so the menu ends
         // level with the card it was opened from.
         const margin = this._sidebar.config.values.sidebar.margin * s;
         const [, , , height] = this._box.get_preferred_size();
-        const [, anchorY] = anchor.get_transformed_position();
-        const [, anchorHeight] = anchor.get_transformed_size();
+        // An anchor that is not shown has no place: the lower end of the
+        // monitor then, where the controls card is.
+        const [, anchorY] = anchor.mapped
+            ? anchor.get_transformed_position() : [0, monitor.y + monitor.height];
+        const [, anchorHeight] = anchor.mapped ? anchor.get_transformed_size() : [0, 0];
         const x = this._sidebar.rightEdge + 8 * s - monitor.x;
         const y = Math.max(margin, Math.min(
             anchorY - monitor.y + anchorHeight / 2 - height / 2,
@@ -4163,68 +4186,20 @@ class OutputMenu {
         this._box.set_position(Math.round(x), Math.round(y));
     }
 
-    _rebuild() {
-        if (!this.isOpen)
-            return;
-        this._list.destroy_all_children();
-        this._rows = [];
-        this._selected = -1;
-        const control = this._control;
-        const sink = control.get_state() === Gvc.MixerControlState.READY
-            ? control.get_default_sink() : null;
-        const active = sink ? control.lookup_device_from_stream(sink)?.get_id() ?? -1 : -1;
-        const ids = [...this._ids].sort((a, b) => a - b);
-        for (const id of ids) {
-            const device = control.lookup_output_id(id);
-            if (!device)
-                continue;
-            const [name, origin] = outputNames(device, control.get_stream_from_device(device));
-            // x_expand on the box itself: with it only on a label inside,
-            // the box of a row does not take the width of the button, and
-            // the row is drawn in its middle.
-            const row = new St.BoxLayout({style_class: 'kelp-output-row-box', x_expand: true});
-            row.add_child(new St.Icon({gicon: outputGicon(device), style_class: 'kelp-icon'}));
-            // One of the two labels takes the room that is left, so the
-            // mark of every row is at the right end.
-            const title = new St.Label({
-                text: name, style_class: 'kelp-output-name',
-                y_align: Clutter.ActorAlign.CENTER, x_expand: !origin,
-            });
-            title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            row.add_child(title);
-            if (origin) {
-                const where = new St.Label({
-                    text: origin, style_class: 'kelp-output-origin',
-                    y_align: Clutter.ActorAlign.CENTER, x_expand: true,
-                });
-                where.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-                row.add_child(where);
-            }
-            // A row without the mark keeps its room.
-            row.add_child(new St.Icon({
-                icon_name: 'object-select-symbolic',
-                style_class: 'kelp-output-check',
-                opacity: id === active ? 255 : 0,
-            }));
-            const actor = new St.Button({style_class: 'kelp-output-row', child: row, x_expand: true});
-            const index = this._rows.length;
-            const run = () => {
-                this.close();
-                const now = control.lookup_output_id(id);
-                if (now)
-                    control.change_output(now);
-            };
-            actor.connect('clicked', run);
-            actor.connect('motion-event', () => {
-                if (this._selected !== index)
-                    this._select(index);
-                return Clutter.EVENT_PROPAGATE;
-            });
-            this._list.add_child(actor);
-            this._rows.push({actor, run});
-        }
-        if (this._rows.length === 0)
-            this._list.add_child(label('No output devices', 'kelp-output-empty'));
+    /**
+     * A row that can be chosen: row.actor is the button, row.run() is what
+     * a click on it or Return does. The row under the pointer is the
+     * chosen one.
+     */
+    _row(row) {
+        row.actor.connect('clicked', () => row.run());
+        row.actor.connect('motion-event', () => {
+            const index = this._rows.indexOf(row);
+            if (index >= 0 && index !== this._selected)
+                this._select(index);
+            return Clutter.EVENT_PROPAGATE;
+        });
+        return row;
     }
 
     _select(index) {
@@ -4265,6 +4240,515 @@ class OutputMenu {
 }
 
 /**
+ * The output devices, shown next to the sidebar on a secondary click on the
+ * speaker icon. A click on one makes it the output.
+ */
+class OutputMenu extends SideMenu {
+    constructor(sidebar, control) {
+        super(sidebar, 'kelp-output-menu');
+        this._control = control;
+        // The ids of the devices. libgvc has no list of them, only a signal
+        // for each one that comes and goes. Those that were there before
+        // this was made are read in open(), see _known().
+        this._ids = new Set();
+
+        this._control.connectObject(
+            'output-added', (_c, id) => {
+                this._ids.add(id);
+                this._rebuild();
+            },
+            'output-removed', (_c, id) => {
+                this._ids.delete(id);
+                this._rebuild();
+            },
+            'active-output-update', () => this._rebuild(),
+            this);
+    }
+
+    destroy() {
+        this._control.disconnectObject(this);
+        super.destroy();
+    }
+
+    open(anchor) {
+        if (!this.isOpen)
+            this._known();
+        super.open(anchor);
+    }
+
+    rehearse(anchor) {
+        if (!this.isOpen)
+            this._known();
+        return super.rehearse(anchor);
+    }
+
+    /**
+     * Add the devices that were there before this was made: those in the
+     * shell's own menu, which has followed the signals since the shell
+     * started, and the device of every stream. The shell's menu alone is
+     * not enough: it has been seen empty while five streams were there.
+     */
+    _known() {
+        const shell = Main.panel.statusArea.quickSettings?._volumeOutput?._output?._deviceItems;
+        for (const id of shell?.keys() ?? [])
+            this._ids.add(id);
+        if (this._control.get_state() !== Gvc.MixerControlState.READY)
+            return;
+        for (const sink of this._control.get_sinks()) {
+            const device = this._control.lookup_device_from_stream(sink);
+            if (device)
+                this._ids.add(device.get_id());
+        }
+    }
+
+    _fill() {
+        this._list.destroy_all_children();
+        this._rows = [];
+        this._selected = -1;
+        const control = this._control;
+        const sink = control.get_state() === Gvc.MixerControlState.READY
+            ? control.get_default_sink() : null;
+        const active = sink ? control.lookup_device_from_stream(sink)?.get_id() ?? -1 : -1;
+        const ids = [...this._ids].sort((a, b) => a - b);
+        for (const id of ids) {
+            const device = control.lookup_output_id(id);
+            if (!device)
+                continue;
+            const [name, origin] = outputNames(device, control.get_stream_from_device(device));
+            // x_expand on the box itself: with it only on a label inside,
+            // the box of a row does not take the width of the button, and
+            // the row is drawn in its middle.
+            const row = new St.BoxLayout({style_class: 'kelp-side-row-box', x_expand: true});
+            row.add_child(new St.Icon({gicon: outputGicon(device), style_class: 'kelp-icon'}));
+            // One of the two labels takes the room that is left, so the
+            // mark of every row is at the right end.
+            const title = new St.Label({
+                text: name, style_class: 'kelp-output-name',
+                y_align: Clutter.ActorAlign.CENTER, x_expand: !origin,
+            });
+            title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            row.add_child(title);
+            if (origin) {
+                const where = new St.Label({
+                    text: origin, style_class: 'kelp-output-origin',
+                    y_align: Clutter.ActorAlign.CENTER, x_expand: true,
+                });
+                where.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+                row.add_child(where);
+            }
+            // A row without the mark keeps its room.
+            row.add_child(new St.Icon({
+                icon_name: 'object-select-symbolic',
+                style_class: 'kelp-output-check',
+                opacity: id === active ? 255 : 0,
+            }));
+            const actor = new St.Button({style_class: 'kelp-side-row', child: row, x_expand: true});
+            const run = () => {
+                this.close();
+                const now = control.lookup_output_id(id);
+                if (now)
+                    control.change_output(now);
+            };
+            this._list.add_child(actor);
+            this._rows.push(this._row({actor, run}));
+        }
+        if (this._rows.length === 0)
+            this._list.add_child(label('No output devices', 'kelp-side-empty'));
+    }
+}
+
+// A quit that has not ended an app after this long has failed: its row
+// shows the close button again.
+const QUIT_TIMEOUT_MS = 5000;
+
+/**
+ * The apps that run without a window (lib/bgapps.js), shown next to the
+ * sidebar on a click on their icons in the controls card. A click on one
+ * opens it, its close button asks it to quit, and so does Delete for the
+ * chosen one. A row comes and goes over CARD_MS, and the menu closes with
+ * the last one.
+ */
+class BackgroundMenu extends SideMenu {
+    constructor(sidebar, apps) {
+        super(sidebar, 'kelp-bg-menu');
+        this._apps = apps;
+        // Every row of the list in its order, those that are closing too.
+        this._entries = [];
+        this._surface.insert_child_at_index(
+            label('Background apps', 'kelp-heading kelp-bg-caption'), 0);
+        apps.onChanged(() => this._rebuild());
+    }
+
+    destroy() {
+        for (const entry of this._entries)
+            this._waitEnd(entry);
+        this._entries = [];
+        super.destroy();
+    }
+
+    open(anchor) {
+        if (this._apps.apps.length > 0)
+            super.open(anchor);
+    }
+
+    _rebuild() {
+        if (this.isOpen && this._apps.apps.length === 0)
+            this.close();
+        else
+            super._rebuild();
+    }
+
+    /**
+     * sample: with no app, one row that stands in for the rows to come, so
+     * a row has been drawn once when the first menu opens (lib/warm.js).
+     * open() shows no menu without an app, and a menu with one has no such
+     * row.
+     */
+    _fill(sample) {
+        let apps = this._apps.apps;
+        if (apps.length === 0 && sample)
+            apps = [{id: '', name: 'App', message: 'Message', app: null}];
+        // A menu that is not on the screen yet has its rows in one frame.
+        const animate = this._overlay.mapped && St.Settings.get().enable_animations;
+        const chosen = this._rows[this._selected] ?? null;
+        const ids = new Set(apps.map(item => item.id));
+        for (const entry of [...this._entries]) {
+            if (!entry.gone && !ids.has(entry.id))
+                this._leave(entry, animate);
+        }
+        for (const item of apps) {
+            const entry = this._entries.find(e => e.id === item.id && !e.gone) ??
+                this._enter(item, animate);
+            entry.message.text = item.message;
+            entry.message.visible = !!item.message;
+        }
+        this._rows = this._entries.filter(entry => !entry.gone);
+        this._selected = chosen ? this._rows.indexOf(chosen) : -1;
+    }
+
+    /** A row for an app, at its place by name. */
+    _enter(item, animate) {
+        const name = new St.Label({text: item.name, style_class: 'kelp-bg-name'});
+        name.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        // What the app says it is doing, under its name.
+        const message = new St.Label({style_class: 'kelp-bg-message', visible: false});
+        message.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        const text = new St.BoxLayout({
+            orientation: VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER,
+        });
+        text.add_child(name);
+        text.add_child(message);
+
+        const quit = new St.Button({
+            style_class: 'kelp-icon-button kelp-bg-quit',
+            child: new St.Icon({icon_name: 'window-close-symbolic', style_class: 'kelp-icon'}),
+            can_focus: true,
+        });
+        quit.accessible_name = `Quit ${item.name}`;
+        // In the place of the close button while the app is asked to quit.
+        // The button keeps its room there, so the row keeps its width.
+        const spinner = new Spinner(16, {hideOnStop: true});
+        spinner.x_align = spinner.y_align = Clutter.ActorAlign.CENTER;
+        const end = new St.Widget({
+            layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER,
+        });
+        end.add_child(quit);
+        end.add_child(spinner);
+
+        const box = new St.BoxLayout({style_class: 'kelp-side-row-box', x_expand: true});
+        box.add_child(new St.Icon({
+            gicon: item.app?.get_icon() ?? Gio.ThemedIcon.new('application-x-executable'),
+            style_class: 'kelp-bg-app-icon',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        box.add_child(text);
+        box.add_child(end);
+        const actor = new St.Button({
+            style_class: 'kelp-side-row kelp-bg-row', child: box, x_expand: true,
+        });
+        // The spacing between two rows is in the rows, so a row that has
+        // closed takes no room at all.
+        const slot = new Reveal(new St.Bin({
+            style_class: 'kelp-bg-row-slot', child: actor, x_expand: true,
+        }));
+        const entry = this._row({
+            id: item.id, name: item.name, actor, slot, message, quit, spinner,
+            gone: false, waitId: 0,
+            run: () => {
+                this.close();
+                item.app?.activate();
+            },
+        });
+        quit.connect('clicked', () => this._quit(entry));
+
+        let index = this._entries.findIndex(e => e.name.localeCompare(item.name) > 0);
+        if (index < 0)
+            index = this._entries.length;
+        this._entries.splice(index, 0, entry);
+        this._list.insert_child_at_index(slot, index);
+        if (animate) {
+            slot.share = 0;
+            slot.ease_property('share', 1, {
+                duration: CARD_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        }
+        return entry;
+    }
+
+    /** The app of a row is gone: the row closes and is then removed. */
+    _leave(entry, animate) {
+        entry.gone = true;
+        this._waitEnd(entry);
+        entry.actor.reactive = false;
+        entry.quit.reactive = false;
+        entry.actor.remove_style_pseudo_class('selected');
+        const remove = () => {
+            const index = this._entries.indexOf(entry);
+            if (index < 0)
+                return;
+            this._entries.splice(index, 1);
+            entry.slot.destroy();
+        };
+        entry.slot.remove_transition('share');
+        if (!animate) {
+            remove();
+            return;
+        }
+        entry.slot.ease_property('share', 0, {
+            duration: CARD_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onComplete: remove,
+        });
+    }
+
+    _quit(entry) {
+        if (entry.gone || entry.waitId)
+            return;
+        entry.quit.opacity = 0;
+        entry.quit.reactive = false;
+        entry.spinner.play();
+        entry.waitId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, QUIT_TIMEOUT_MS, () => {
+            entry.waitId = 0;
+            this._waitEnd(entry);
+            return GLib.SOURCE_REMOVE;
+        });
+        this._apps.quit(entry.id);
+    }
+
+    /** The row of an app that was asked to quit shows its close button again. */
+    _waitEnd(entry) {
+        if (entry.waitId)
+            GLib.source_remove(entry.waitId);
+        entry.waitId = 0;
+        entry.spinner.stop();
+        entry.quit.opacity = 255;
+        entry.quit.reactive = true;
+    }
+
+    _onKey(event) {
+        const key = event.get_key_symbol();
+        if (key !== Clutter.KEY_Delete && key !== Clutter.KEY_KP_Delete)
+            return super._onKey(event);
+        const entry = this._rows[this._selected];
+        if (entry)
+            this._quit(entry);
+        return Clutter.EVENT_STOP;
+    }
+}
+
+// The row of the controls card shows this many icons at most, and the
+// number of the apps that are left out after them.
+const BACKGROUND_ICONS = 5;
+const BACKGROUND_ICONS_COLLAPSED = 3;
+
+/**
+ * The apps that run without a window (lib/bgapps.js): their icons, in a
+ * row of the controls card that is there only while there is one. A click
+ * lists them next to the sidebar, see BackgroundMenu. Collapsed, the icons
+ * are a column.
+ */
+class BackgroundRow {
+    /** state: the apps before a lock of the screen, see the state getter. */
+    constructor(sidebar, state) {
+        this._apps = new BackgroundApps(state);
+        this._collapsed = false;
+        this._shown = false;
+        // The icon of each app that is shown, by its id.
+        this._icons = new Map();
+
+        this._box = new St.BoxLayout({
+            style_class: 'kelp-bg-icons',
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+        this._more = new St.Label({
+            style_class: 'kelp-bg-more',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+            visible: false,
+        });
+        this._box.add_child(this._more);
+        this._button = new St.Button({
+            style_class: 'kelp-row-button kelp-bg',
+            child: this._box,
+            x_expand: true,
+            can_focus: true,
+        });
+        this._button.accessible_name = 'Background apps';
+        this._menu = new BackgroundMenu(sidebar, this._apps);
+        this._button.connect('clicked', () => this._menu.toggle(this._button));
+        this.rehearse = () => this._menu.rehearse(this._button);
+
+        // The spacing to the row over this one is part of what closes, so
+        // a closed row takes no room. The volume row under it stays where
+        // it is, and so do the icons: the card gets higher at its top.
+        this._full = new FullHeight(new St.Bin({
+            style_class: 'kelp-bg-slot', child: this._button, x_expand: true,
+        }));
+        this.actor = new Reveal(this._full, true);
+        this.actor.share = 0;
+        this.actor.hide();
+
+        this._apps.onChanged(seen => this._sync(seen));
+        this._sync(false);
+    }
+
+    /** What the constructor takes to show the same row after a lock. */
+    get state() {
+        return this._apps?.apps ?? null;
+    }
+
+    _sync(animate) {
+        if (!this._apps)
+            return;
+        const apps = this._apps.apps;
+        const show = apps.length > 0;
+        // The row itself is hidden while it is closed, so the card tells
+        // whether it is on the screen.
+        animate &&= !!this.actor.get_parent()?.mapped && St.Settings.get().enable_animations;
+        // The icons stay as they are while the row closes. A row that
+        // opens has them in its first frame.
+        if (show && this._shown && animate)
+            this._full.easeOver(() => this._build(apps, true));
+        else if (show)
+            this._build(apps, false);
+        this._setShown(show, animate);
+    }
+
+    /**
+     * The icons of the apps, in their order, up to the number that has
+     * room. With animate, an icon that comes fades in, and those that stay
+     * go from where they are drawn to their new places over CARD_MS.
+     */
+    _build(apps, animate) {
+        const most = this._collapsed ? BACKGROUND_ICONS_COLLAPSED : BACKGROUND_ICONS;
+        // With more apps than places, the last place is the number of the
+        // apps that have no icon.
+        const count = apps.length > most ? most - 1 : apps.length;
+        const shown = apps.slice(0, count);
+        const ids = new Set(shown.map(item => item.id));
+        const fadeIn = actor => {
+            actor.opacity = 0;
+            actor.ease({
+                opacity: 255,
+                duration: CARD_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        };
+        const stay = [...this._icons].filter(([id]) => ids.has(id)).map(([, icon]) => icon);
+        if (this._more.visible)
+            stay.push(this._more);
+        const drawn = new Map(animate
+            ? stay.map(actor => [actor, actor.get_transformed_position()]) : []);
+
+        for (const [id, icon] of this._icons) {
+            if (ids.has(id))
+                continue;
+            this._icons.delete(id);
+            icon.destroy();
+        }
+        shown.forEach((item, index) => {
+            let icon = this._icons.get(item.id);
+            if (!icon) {
+                icon = new St.Icon({gicon: item.app.get_icon(), style_class: 'kelp-bg-icon'});
+                this._icons.set(item.id, icon);
+                this._box.add_child(icon);
+                if (animate)
+                    fadeIn(icon);
+            }
+            this._box.set_child_at_index(icon, index);
+        });
+        const more = apps.length > count;
+        this._more.text = `+${apps.length - count}`;
+        if (more && !this._more.visible && animate)
+            fadeIn(this._more);
+        this._more.visible = more;
+
+        if (drawn.size === 0)
+            return;
+        // The new places are known once the row is laid out, which
+        // reading an allocation does at once.
+        this._box.get_allocation_box();
+        for (const [actor, [x, y]] of drawn) {
+            if (!actor.visible)
+                continue;
+            actor.remove_transition('translation-x');
+            actor.remove_transition('translation-y');
+            actor.set_translation(0, 0, 0);
+            const [toX, toY] = actor.get_transformed_position();
+            if (x === toX && y === toY)
+                continue;
+            actor.set_translation(x - toX, y - toY, 0);
+            actor.ease({
+                translation_x: 0,
+                translation_y: 0,
+                duration: CARD_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        }
+    }
+
+    _setShown(show, animate) {
+        if (show === this._shown)
+            return;
+        this._shown = show;
+        const reveal = this.actor;
+        reveal.remove_transition('share');
+        if (!animate) {
+            reveal.share = show ? 1 : 0;
+            reveal.visible = show;
+            return;
+        }
+        // Clutter starts no transition on an actor that is not mapped.
+        if (show)
+            reveal.show();
+        reveal.ease_property('share', show ? 1 : 0, {
+            duration: CARD_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onComplete: () => {
+                if (!show)
+                    reveal.hide();
+            },
+        });
+    }
+
+    setCollapsed(collapsed) {
+        if (collapsed === this._collapsed)
+            return;
+        this._collapsed = collapsed;
+        this._box.orientation = collapsed ? VERTICAL : HORIZONTAL;
+        if (this._apps.apps.length > 0)
+            this._build(this._apps.apps, false);
+    }
+
+    destroy() {
+        this._menu.destroy();
+        this._apps.destroy();
+        this._apps = null;
+    }
+}
+
+/**
  * Output volume: the speaker icon and a slider. A click on the icon mutes, a
  * secondary click shows the output devices. The icon shows the kind of the
  * device where that is not the machine's own speakers, and the volume where
@@ -4285,6 +4769,7 @@ class VolumeRow {
             button_mask: St.ButtonMask.PRIMARY | St.ButtonMask.SECONDARY,
         });
         this._menu = new OutputMenu(sidebar, this._control);
+        this.rehearse = () => this._menu.rehearse(this._mute);
         this._mute.connect('clicked', (_b, button) => {
             if (button !== 1)
                 this._menu.toggle(this._mute);
@@ -4493,7 +4978,7 @@ export class Sidebar {
         this._downloads = new DownloadsCard(this, state?.downloads);
         this._system = new SystemCard(this);
         this._privacy = new PrivacyCard(this);
-        this._controls = new ControlsCard(this);
+        this._controls = new ControlsCard(this, state?.background);
         this._cards = [this._clock, this._minimap, this._media, this._notifications,
             this._downloads, this._system, this._privacy, this._controls];
         // The whole of a card stops a click, its padding too.
@@ -4600,6 +5085,8 @@ export class Sidebar {
             peek: this._covered === true && this._peek && this._peekPos.target > 0,
             // The files of the pile, see DownloadsCard.state.
             downloads: this._downloads.state,
+            // The apps without a window, see BackgroundRow.state.
+            background: this._controls.backgroundState,
         };
     }
 
@@ -5096,6 +5583,15 @@ export class Sidebar {
 
     get quickSettingsSource() {
         return this._controls?.actor ?? null;
+    }
+
+    /** For lib/warm.js: the two menus of the controls card, see SideMenu.rehearse. */
+    rehearseOutputs() {
+        return this._controls?.rehearseOutputs() ?? null;
+    }
+
+    rehearseBackground() {
+        return this._controls?.rehearseBackground() ?? null;
     }
 
     toggleCollapsed() {
