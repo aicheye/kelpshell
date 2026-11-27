@@ -3332,9 +3332,26 @@ class FocusRing {
             this.sync();
             if (!shown && this.actor.visible)
                 this._fadeIn();
-        }, 'destroy', (_wm, actor) => this._leave(actor), this);
+        }, 'map', (_wm, actor) => this._onShown(actor),
+        'unminimize', (_wm, actor) => this._onShown(actor),
+        'destroy', (_wm, actor) => this._leave(actor), this);
         this._leaving = null;      // {actor, frame, buffer, opacity}, see leaving()
         this._ghosts = new Set();  // functions that end a ring on a closing window
+    }
+
+    /**
+     * The shell has mapped a window or brought it back from minimized. The
+     * ring is on the window by then, placed with no animation to follow,
+     * and nothing moves it after that: it would be at the window's place
+     * at its full size while the window grows to that from 1% of it. A
+     * prompt of 1Password opens that way.
+     *
+     * This runs after the shell's own handler, which has the actor at the
+     * scale its animation starts from by now, see _animated().
+     */
+    _onShown(actor) {
+        if (actor.meta_window === this.win)
+            this.sync();
     }
 
     /**
@@ -3528,6 +3545,19 @@ class FocusRing {
             this.actor.hide();
             return;
         }
+        const hidden = !this.actor.visible;
+        this._place(x, y, width, height);
+        // The ring comes up on a window that is fading in: a new window
+        // that left its column, which was out of view, for the middle of
+        // the monitor. It fades in too, and is not there before the window.
+        if (hidden && this.actor.visible) {
+            const actor = this.win.get_compositor_private();
+            if (actor?.get_transition('opacity') && actor.opacity < 255)
+                this._fadeIn();
+        }
+    }
+
+    _place(x, y, width, height) {
         const w = this.wm.config.values.focusRing.width *
             St.ThemeContext.get_for_stage(global.stage).scale_factor;
         this.actor.set_position(x - w, y - w);
@@ -3579,9 +3609,20 @@ class FocusRing {
         const win = this.win;
         const actor = win?.get_compositor_private();
         const busy = actor?.get_transition('scale-x') ?? actor?.get_transition('scale-y');
-        if (!busy)
-            return null;
-        if (this._busy !== busy) {
+        if (!busy) {
+            // The shell sets a window it maps to the scale its animation
+            // starts from, and starts the animation after an await. The
+            // ring is at that scale until then, and is placed again
+            // before the next frame, when the transition is there.
+            if (!actor || !Main.wm._mapping?.has(actor))
+                return null;
+            this._shownId ||= global.compositor.get_laters().add(
+                Meta.LaterType.BEFORE_REDRAW, () => {
+                    this._shownId = 0;
+                    this.sync();
+                    return GLib.SOURCE_REMOVE;
+                });
+        } else if (this._busy !== busy) {
             this._busy = busy;
             // The shell animates the actor's position with transitions of
             // their own, and this one can be stepped before them. The ring
@@ -3648,6 +3689,9 @@ class FocusRing {
         if (this._laterId)
             global.compositor.get_laters().remove(this._laterId);
         this._laterId = 0;
+        if (this._shownId)
+            global.compositor.get_laters().remove(this._shownId);
+        this._shownId = 0;
         this._busy = null;
         this._leaving = null;
         for (const end of [...this._ghosts])
