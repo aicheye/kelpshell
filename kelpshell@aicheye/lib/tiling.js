@@ -2609,9 +2609,28 @@ class Strip {
         const shown = !ws || ws === global.workspace_manager.get_active_workspace();
         if (shown && !global.display.get_monitor_in_fullscreen(this.monitor))
             return null;
+        return this.shownFull;
+    }
+
+    /**
+     * The fullscreen tile of this strip that is drawn over its other
+     * fullscreen ones: the one in focus, or the top one in the stack of
+     * the windows while a window that came in over it has the focus. null
+     * with no fullscreen tile.
+     *
+     * With several fullscreen windows on a strip, the first in the order
+     * of the columns can be one that is under the one on the screen. A
+     * window that came in over the second of two would be placed, and sent
+     * out, as if it were over the first.
+     */
+    get shownFull() {
         if (this.focus?.fullscreen)
             return this.focus;
-        return this.tiles.find(t => t.fullscreen) ?? null;
+        const full = this.tiles.filter(t => t.fullscreen);
+        if (full.length < 2)
+            return full[0] ?? null;
+        const top = global.display.sort_windows_by_stacking(full.map(t => t.win)).at(-1);
+        return full.find(t => t.win === top) ?? full[0];
     }
 
     /** What a swipe moves for a direction of travel: 1 to the right, -1 to the left. */
@@ -2660,7 +2679,12 @@ class Strip {
         const [left, right] = this._view;
         const back = focus !== cover && next.tiles.includes(cover);
         const tile = back ? cover : next.active ?? next.tiles[0];
-        if (!back && (!tile?.target || tile.fullscreen))
+        // The next column is another fullscreen window. Nothing moves with
+        // the fingers: it takes the focus when they lift, as it does after
+        // a focus key, and what is over this one leaves then.
+        if (!back && tile?.fullscreen)
+            return {kind: 'app', dir, tile, reach: s.viewW};
+        if (!back && !tile?.target)
             return {kind: 'none', dir};
         const scroll = this._scrollTo(next, s.viewW, s.base);
         // The window of the next column is over the fullscreen one already.
@@ -2843,7 +2867,7 @@ class Strip {
         const {tile, raised} = plan;
         if (tile.dead)
             return;
-        const cover = this.tiles.find(t => t.fullscreen);
+        const cover = this.shownFull;
         if (raised && cover && cover.actor.get_parent() === tile.actor.get_parent())
             tile.actor.get_parent().set_child_below_sibling(tile.actor, cover.actor);
         if (tile.target)
@@ -2901,7 +2925,7 @@ class Strip {
         // one that takes it when the fingers lift, by the share of the way
         // that window has come in or the other has left.
         const plan = s.plan;
-        const kinds = {in: plan?.tile, focus: plan?.tile, out: plan?.to};
+        const kinds = {in: plan?.tile, focus: plan?.tile, app: plan?.tile, out: plan?.to};
         const to = plan ? kinds[plan.kind] ?? null : null;
         const from = this.focus;
         this.wm.setBetween('windows', to && from && plan.reach > 0 && this.wm.isActiveStrip(this)
@@ -2950,6 +2974,12 @@ class Strip {
                 this.wm.peekSink?.stay(-velocity);
             else
                 this.wm.peekSink?.end(-velocity);
+            done();
+        } else if (plan.kind === 'app') {
+            // The windows over this fullscreen window leave when the
+            // other one has the focus, see coverClear().
+            if (counts && this.wm.isActiveStrip(this))
+                plan.tile.win.activate(time);
             done();
         } else if (plan.kind === 'focus' && !counts) {
             done();
@@ -3206,6 +3236,7 @@ class Strip {
         }
         // 'focus': a window away from the fullscreen one that is over it
         // already is in view, or scrolls into view, like any column.
+        // 'app': another fullscreen window takes the focus like any column.
         return false;
     }
 
@@ -5606,7 +5637,7 @@ export class Tiling {
         // raised first, and keeps the focus.
         if (win && this._switching) {
             const tile = this.tiles.get(win);
-            const cover = tile?.strip?.tiles.find(t => t.fullscreen);
+            const cover = tile?.strip?.shownFull;
             if (cover && cover !== tile &&
                 global.display.sort_windows_by_stacking([win, cover.win])[0] === win) {
                 this._refocus = cover.win;
