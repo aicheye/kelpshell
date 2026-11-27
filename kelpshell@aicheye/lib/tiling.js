@@ -1900,9 +1900,15 @@ class Strip {
             return this._fitWidth(col, proportion, {area, gap, viewW, learned, pinned});
         const min = this._leastWidth(col, learned);
         const width = p => Math.round((area.width - gap) * p - gap);
-        const want = width(proportion);
+        let want = width(proportion);
         // Wider than the view over a fullscreen window, see fullProportion.
         const cap = viewW + (this._coverAt >= 0 ? this._room : 0);
+        // A column as wide as the view is as wide as the monitor there. It
+        // was made full width with no fullscreen window on the strip, and
+        // at the width of the view it would leave the room of the sidebar
+        // empty beside it, with the cards out of view.
+        if (cap > viewW && viewW - want <= FULL_SLACK * viewW)
+            want = cap;
         let least = Math.min(min, viewW);
         if (want < least) {
             // The window does not go as narrow as asked. Its minimum is
